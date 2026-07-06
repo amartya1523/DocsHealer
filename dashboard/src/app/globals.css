@@ -1,3 +1,7 @@
+/**
+ * DocsHealer Dashboard - Global Styles
+ * Dark theme with modern glass morphism design
+ */
 @import "tailwindcss";
 
 :root {
@@ -17,7 +21,7 @@
   --accent-red: #ef4444;
   --accent-cyan: #06b6d4;
 }
-
+/*hello*/
 * {
   box-sizing: border-box;
 }

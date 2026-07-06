@@ -22,7 +22,7 @@
 
 ## 📖 Overview
 
-DocsHealer is an intelligent documentation maintenance system that automatically detects when your code changes make documentation stale, and generates accurate fixes using GPT-4o. It integrates seamlessly into your GitHub workflow via GitHub Actions, analyzes pull requests, and creates auto-fix PRs when documentation needs updating.
+DocsHealer is an intelligent documentation maintenance system that automatically detects when your code changes make documentation stale, and generates accurate fixes using GPT-4o. It seamlessly integrates into your GitHub workflow via GitHub Actions, analyzes pull requests in real-time, and creates auto-fix PRs when documentation needs updating.
 
 ### The Problem
 

@@ -3,11 +3,10 @@ import { QueryProvider } from '@/providers/QueryProvider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Docs Healer — AI Documentation Intelligence Platform',
+  title: 'DocsHealer — AI Documentation Intelligence Platform',
   description: 'Automatically keeps documentation synchronized with your code using AST parsing, semantic embeddings, and LLM verification.',
-  keywords: ['documentation', 'AI', 'GitHub', 'LLM', 'developer tools'],
+  keywords: ['documentation', 'AI', 'GitHub', 'LLM', 'developer tools', 'automation'],
 };
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
