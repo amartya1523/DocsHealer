@@ -497,15 +497,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 🙏 Acknowledgments
 
-- **OpenAI** for GPT-4o and text-embedding-3-small models
-- **GitHub** for Actions and API
-- **Next.js** team for the amazing framework
-- **Radix UI** for accessible components
-- **All contributors** who help improve DocsHealer
-
----
 
 ## 📮 Contact
 
