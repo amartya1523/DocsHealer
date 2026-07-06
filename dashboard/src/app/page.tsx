@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Navbar } from '@/components/Navbar';
 import { Hero } from '@/components/Hero';
@@ -19,30 +19,23 @@ import { Documentation } from '@/components/Documentation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRepositories, useRunScan } from '@/lib/api/hooks';
 import { useScanProgress } from '@/hooks/useScanProgress';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedRepo, setSelectedRepo] = useState<string>('');
+  const searchParams = useSearchParams();
   const { data: repositories = [] } = useRepositories();
   const runScan = useRunScan();
   const { progress } = useScanProgress();
   const isScanning = progress.isRunning || runScan.isPending;
-  const selectedRepository = repositories.find((repo) => repo.id === selectedRepo) ?? repositories[0] ?? null;
-
-  useEffect(() => {
-    if (repositories.length === 0) {
-      if (selectedRepo) {
-        setSelectedRepo('');
-      }
-      return;
-    }
-
-    const hasSelectedRepo = repositories.some((repo) => repo.id === selectedRepo);
-    if (!hasSelectedRepo) {
-      setSelectedRepo(repositories[0].id);
-    }
-  }, [repositories, selectedRepo]);
+  const selectedRepoId = repositories.some((repo) => repo.id === selectedRepo)
+    ? selectedRepo
+    : (repositories[0]?.id ?? '');
+  const selectedRepository = repositories.find((repo) => repo.id === selectedRepoId) ?? null;
+  const githubStatus = searchParams.get('github');
+  const githubError = searchParams.get('github_error');
 
   const handleRunScan = async () => {
     if (!selectedRepository || isScanning) return;
@@ -101,7 +94,7 @@ export default function DashboardPage() {
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex flex-col flex-1 min-w-0">
         <Navbar
-          selectedRepo={selectedRepo}
+          selectedRepo={selectedRepoId}
           onRepoChange={setSelectedRepo}
           onRunScan={() => void handleRunScan()}
           isScanning={isScanning}
@@ -110,6 +103,18 @@ export default function DashboardPage() {
           <div className="mx-6 mt-4 flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/6 px-4 py-3 text-sm text-red-200">
             <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
             <span>{runScan.error.message}</span>
+          </div>
+        )}
+        {githubStatus === 'connected' && (
+          <div className="mx-6 mt-4 flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-100">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />
+            <span>GitHub account connected successfully. Your repositories are now live in the dashboard.</span>
+          </div>
+        )}
+        {githubError && (
+          <div className="mx-6 mt-4 flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/6 px-4 py-3 text-sm text-red-200">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+            <span>{githubError}</span>
           </div>
         )}
         <AnimatePresence mode="wait">

@@ -16,6 +16,7 @@ export function useScanProgress(enabled = true) {
   const [progress, setProgress] = useState<PipelineProgress>(IDLE_PROGRESS);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [connectionNonce, setConnectionNonce] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const disconnect = useCallback(() => {
@@ -24,11 +25,8 @@ export function useScanProgress(enabled = true) {
     setConnected(false);
   }, []);
 
-  const connect = useCallback(() => {
+  useEffect(() => {
     if (!enabled) return;
-
-    disconnect();
-    setError(null);
 
     const source = new EventSource(`${API_BASE}/api/scan/progress`);
     eventSourceRef.current = source;
@@ -59,14 +57,26 @@ export function useScanProgress(enabled = true) {
     source.onerror = () => {
       setConnected(false);
       setError('Lost connection to scan progress stream');
-      disconnect();
+      source.close();
+      if (eventSourceRef.current === source) {
+        eventSourceRef.current = null;
+      }
     };
-  }, [disconnect, enabled]);
 
-  useEffect(() => {
-    connect();
-    return disconnect;
-  }, [connect, disconnect]);
+    return () => {
+      source.close();
+      if (eventSourceRef.current === source) {
+        eventSourceRef.current = null;
+      }
+    };
+  }, [enabled, connectionNonce]);
+
+  const reconnect = useCallback(() => {
+    disconnect();
+    setProgress(IDLE_PROGRESS);
+    setError(null);
+    setConnectionNonce((value) => value + 1);
+  }, [disconnect]);
 
   const stageStatuses: PipelineStageStatus[] =
     progress.stageStatuses.length > 0
@@ -80,6 +90,6 @@ export function useScanProgress(enabled = true) {
     },
     error,
     connected,
-    reconnect: connect,
+    reconnect,
   };
 }

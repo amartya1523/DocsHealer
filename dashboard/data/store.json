@@ -1,0 +1,539 @@
+{
+  "githubAuth": {
+    "accessToken": "null",
+    "scopes": [
+      "read:user",
+      "repo",
+      "user:email"
+    ],
+    "connectedAt": "2026-07-06T18:43:34.052Z"
+  },
+  "repositories": [
+    {
+      "id": "1291341196",
+      "name": "DocsHealer",
+      "fullName": "amartya1523/DocsHealer",
+      "language": "TypeScript",
+      "languageColor": "#3178c6",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 35,
+      "lastScan": "just now",
+      "branch": "master",
+      "docSections": 0,
+      "codeChunks": 0
+    },
+    {
+      "id": "1277144176",
+      "name": "LEETcode",
+      "fullName": "amartya1523/LEETcode",
+      "language": "C++",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 47,
+      "lastScan": "1 hour ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 95
+    },
+    {
+      "id": "1291136488",
+      "name": "RuView_Simulator",
+      "fullName": "amartya1523/RuView_Simulator",
+      "language": "Unknown",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "5 hours ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 179259
+    },
+    {
+      "id": "1242623596",
+      "name": "My-Portfolio",
+      "fullName": "amartya1523/My-Portfolio",
+      "language": "TypeScript",
+      "languageColor": "#3178c6",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "12 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 42874
+    },
+    {
+      "id": "1273006844",
+      "name": "Ai_COO_System",
+      "fullName": "amartya1523/Ai_COO_System",
+      "language": "JavaScript",
+      "languageColor": "#f7df1e",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 60,
+      "lastScan": "19 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 203
+    },
+    {
+      "id": "1226253148",
+      "name": "our-brothers-keeper",
+      "fullName": "amartya1523/our-brothers-keeper",
+      "language": "Unknown",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "67 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 189974
+    },
+    {
+      "id": "1182629240",
+      "name": "Early-Cardiac-Risk-Prediction-from-Personalized-Stress-",
+      "fullName": "amartya1523/Early-Cardiac-Risk-Prediction-from-Personalized-Stress-",
+      "language": "Jupyter Notebook",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "113 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 2519
+    },
+    {
+      "id": "1056079275",
+      "name": "Automated-Laundry-Availability-and-Reservation-System-",
+      "fullName": "amartya1523/Automated-Laundry-Availability-and-Reservation-System-",
+      "language": "JavaScript",
+      "languageColor": "#f7df1e",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 57,
+      "lastScan": "270 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 173
+    },
+    {
+      "id": "1049299408",
+      "name": "ClearTrade-AI",
+      "fullName": "amartya1523/ClearTrade-AI",
+      "language": "TypeScript",
+      "languageColor": "#3178c6",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 54,
+      "lastScan": "294 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 151
+    },
+    {
+      "id": "1057001413",
+      "name": "CLEAR",
+      "fullName": "amartya1523/CLEAR",
+      "language": "TypeScript",
+      "languageColor": "#3178c6",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 44,
+      "lastScan": "295 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 69
+    },
+    {
+      "id": "1044925494",
+      "name": "legalease-ai-project",
+      "fullName": "amartya1523/legalease-ai-project",
+      "language": "Python",
+      "languageColor": "#3572A5",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "295 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 60703
+    },
+    {
+      "id": "1049282828",
+      "name": "Clear-Trade-AI-Frontend-",
+      "fullName": "amartya1523/Clear-Trade-AI-Frontend-",
+      "language": "TypeScript",
+      "languageColor": "#3178c6",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 43,
+      "lastScan": "307 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 63
+    },
+    {
+      "id": "1044334722",
+      "name": "LegalEase-AI-Frontend-",
+      "fullName": "amartya1523/LegalEase-AI-Frontend-",
+      "language": "TypeScript",
+      "languageColor": "#3178c6",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 47,
+      "lastScan": "315 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 97
+    },
+    {
+      "id": "1036894430",
+      "name": "backend-",
+      "fullName": "amartya1523/backend-",
+      "language": "JavaScript",
+      "languageColor": "#f7df1e",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 38,
+      "lastScan": "328 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 26
+    },
+    {
+      "id": "1015536089",
+      "name": "Support-Resistance-Level-Detection-Chatbot",
+      "fullName": "amartya1523/Support-Resistance-Level-Detection-Chatbot",
+      "language": "Python",
+      "languageColor": "#3572A5",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 65,
+      "lastScan": "336 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 240
+    },
+    {
+      "id": "1012552804",
+      "name": "BACK",
+      "fullName": "amartya1523/BACK",
+      "language": "Python",
+      "languageColor": "#3572A5",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 36,
+      "lastScan": "369 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 6
+    },
+    {
+      "id": "1012543394",
+      "name": "WASHING-MACHINE-BOOKING-SYSTEM-TESTING",
+      "fullName": "amartya1523/WASHING-MACHINE-BOOKING-SYSTEM-TESTING",
+      "language": "JavaScript",
+      "languageColor": "#f7df1e",
+      "avatar": "A",
+      "stars": 0,
+      "health": 63,
+      "coverage": 59,
+      "lastScan": "369 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 192
+    },
+    {
+      "id": "836806099",
+      "name": "GDSC-Galactic",
+      "fullName": "amartya1523/GDSC-Galactic",
+      "language": "HTML",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "704 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 8347
+    },
+    {
+      "id": "804684929",
+      "name": "Grocify-Homepage",
+      "fullName": "amartya1523/Grocify-Homepage",
+      "language": "HTML",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "775 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 2331
+    },
+    {
+      "id": "776274786",
+      "name": "code-challenge-2024-amartya1523",
+      "fullName": "amartya1523/code-challenge-2024-amartya1523",
+      "language": "Unknown",
+      "languageColor": "#64748b",
+      "avatar": "A",
+      "stars": 0,
+      "health": 65,
+      "coverage": 85,
+      "lastScan": "838 days ago",
+      "branch": "main",
+      "docSections": 0,
+      "codeChunks": 13999
+    }
+  ],
+  "affectedSections": [],
+  "corrections": [],
+  "pullRequests": [],
+  "scanHistory": [
+    {
+      "id": "scan-1783363452041",
+      "repository": "amartya1523/DocsHealer",
+      "repoId": "1291341196",
+      "status": "completed",
+      "duration": 12,
+      "filesChanged": 0,
+      "meaningfulChanges": 0,
+      "sectionsChecked": 0,
+      "aiFixes": 0,
+      "progress": 100,
+      "startedAt": "2026-07-06T18:44:12.041Z",
+      "completedAt": "2026-07-06T18:44:23.682Z",
+      "baseSha": "",
+      "headSha": "",
+      "cacheHitRatio": 0,
+      "indexBuildDuration": 0,
+      "llmCost": 0,
+      "tokenUsage": 0
+    }
+  ],
+  "logs": [
+    {
+      "id": "log-1783363414052-0",
+      "timestamp": "2026-07-06T18:43:34.052Z",
+      "level": "info",
+      "message": "Connected GitHub account amartya1523",
+      "phase": "github"
+    },
+    {
+      "id": "log-1783363452041-1",
+      "timestamp": "2026-07-06T18:44:12.041Z",
+      "level": "info",
+      "message": "Scan started for amartya1523/DocsHealer",
+      "phase": "scan"
+    },
+    {
+      "id": "log-1783363452845-2",
+      "timestamp": "2026-07-06T18:44:12.846Z",
+      "level": "info",
+      "message": "Connect GitHub repo and fetch PR diff",
+      "phase": "repo"
+    },
+    {
+      "id": "log-1783363454049-3",
+      "timestamp": "2026-07-06T18:44:14.049Z",
+      "level": "info",
+      "message": "AST analysis of Python & TypeScript files",
+      "phase": "code_parser"
+    },
+    {
+      "id": "log-1783363455253-4",
+      "timestamp": "2026-07-06T18:44:15.253Z",
+      "level": "info",
+      "message": "Split markdown into semantic sections",
+      "phase": "doc_parser"
+    },
+    {
+      "id": "log-1783363456458-5",
+      "timestamp": "2026-07-06T18:44:16.458Z",
+      "level": "info",
+      "message": "Generate semantic vectors via OpenAI API",
+      "phase": "embedding"
+    },
+    {
+      "id": "log-1783363457661-6",
+      "timestamp": "2026-07-06T18:44:17.661Z",
+      "level": "info",
+      "message": "Build semantic link graph with confidence scores",
+      "phase": "graph"
+    },
+    {
+      "id": "log-1783363458864-7",
+      "timestamp": "2026-07-06T18:44:18.864Z",
+      "level": "info",
+      "message": "Classify meaningful changes by type",
+      "phase": "diff"
+    },
+    {
+      "id": "log-1783363460068-8",
+      "timestamp": "2026-07-06T18:44:20.068Z",
+      "level": "info",
+      "message": "GPT-4o staleness verification with structured output",
+      "phase": "llm"
+    },
+    {
+      "id": "log-1783363461275-9",
+      "timestamp": "2026-07-06T18:44:21.275Z",
+      "level": "info",
+      "message": "Generate & validate corrected documentation",
+      "phase": "repair"
+    },
+    {
+      "id": "log-1783363462478-10",
+      "timestamp": "2026-07-06T18:44:22.478Z",
+      "level": "info",
+      "message": "Push branch and open auto-fix pull request",
+      "phase": "pr"
+    },
+    {
+      "id": "log-1783363463732-11",
+      "timestamp": "2026-07-06T18:44:23.732Z",
+      "level": "info",
+      "message": "Scan completed for amartya1523/DocsHealer in 12s",
+      "phase": "scan"
+    }
+  ],
+  "notifications": [
+    {
+      "type": "scan_finished",
+      "title": "Scan Completed",
+      "description": "Scan of amartya1523/DocsHealer completed in 12s",
+      "timestamp": "2026-07-06T18:44:23.732Z",
+      "read": false,
+      "repository": "amartya1523/DocsHealer",
+      "id": "notif-1783363463732-1"
+    },
+    {
+      "type": "repo_connected",
+      "title": "GitHub Connected",
+      "description": "Connected 20 repositories from @amartya1523",
+      "timestamp": "2026-07-06T18:43:34.052Z",
+      "read": false,
+      "repository": "amartya1523/DocsHealer",
+      "id": "notif-1783363414052-0"
+    }
+  ],
+  "analytics": [
+    {
+      "date": "Jul 7",
+      "accuracy": 0,
+      "fixes": 0,
+      "health": 65,
+      "confidence": 0,
+      "falsePositive": 0,
+      "processingTime": 12,
+      "llmCost": 0,
+      "tokenUsage": 0
+    }
+  ],
+  "settings": {
+    "github": {
+      "connected": true,
+      "tokenMasked": "gho_••••nQen",
+      "autoFixPrs": true,
+      "webhookEvents": true
+    },
+    "ai": {
+      "llmModel": "gpt-4o",
+      "embeddingModel": "text-embedding-3-large",
+      "autoFixThreshold": 85,
+      "parallelWorkers": 2
+    },
+    "notifications": {
+      "email": false,
+      "slack": false,
+      "slackWebhookUrl": "",
+      "notifyOnReview": true
+    },
+    "security": {
+      "webhookSecretMasked": "",
+      "rateLimit": "60 req/min",
+      "auditLogging": true,
+      "cacheTtlHours": 24
+    },
+    "githubPermissions": [
+      {
+        "scope": "contents:read",
+        "desc": "Read repository files and diff",
+        "granted": true
+      },
+      {
+        "scope": "pull_requests:write",
+        "desc": "Create and update pull requests",
+        "granted": true
+      },
+      {
+        "scope": "issues:write",
+        "desc": "Create issues for flagged sections",
+        "granted": true
+      },
+      {
+        "scope": "checks:write",
+        "desc": "Post check run status to commits",
+        "granted": true
+      },
+      {
+        "scope": "metadata:read",
+        "desc": "Read repository metadata",
+        "granted": true
+      },
+      {
+        "scope": "statuses:write",
+        "desc": "Post commit status",
+        "granted": true
+      }
+    ]
+  },
+  "user": {
+    "name": "Amartya Vikram Singh",
+    "email": "amartyasingh556@gmail.com",
+    "initials": "AV",
+    "githubUsername": "amartya1523",
+    "githubConnected": true
+  },
+  "pipeline": {
+    "isRunning": false,
+    "activeStageIndex": -1,
+    "stageStatuses": [
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "done"
+    ],
+    "scanId": null,
+    "message": "Scan completed"
+  }
+}
