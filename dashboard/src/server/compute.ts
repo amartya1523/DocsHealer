@@ -31,6 +31,11 @@ export const PIPELINE_STAGES: PipelineStage[] = [
 ];
 
 export interface DashboardStore {
+  githubAuth: {
+    accessToken: string | null;
+    scopes: string[];
+    connectedAt: string | null;
+  };
   repositories: Repository[];
   affectedSections: AffectedSection[];
   corrections: AICorrection[];
@@ -87,6 +92,11 @@ export const DEFAULT_SETTINGS: SettingsData = {
 
 export function createEmptyStore(): DashboardStore {
   return {
+    githubAuth: {
+      accessToken: null,
+      scopes: [],
+      connectedAt: null,
+    },
     repositories: [],
     affectedSections: [],
     corrections: [],

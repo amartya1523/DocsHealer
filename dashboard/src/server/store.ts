@@ -11,6 +11,7 @@ import {
   PIPELINE_STAGES,
   type DashboardStore,
 } from '@/server/compute';
+import type { GitHubConnectionData } from '@/server/github-oauth';
 import type {
   AffectedSection,
   AICorrection,
@@ -28,12 +29,92 @@ const STORE_PATH = path.join(process.cwd(), 'data', 'store.json');
 
 type ProgressListener = (progress: ReturnType<typeof buildPipelineProgress>) => void;
 
+const DEMO_SCAN_SECTION_BLUEPRINTS = [
+  {
+    slug: 'api-authentication',
+    section: 'API Authentication Flow',
+    file: 'docs/api/authentication.md',
+    currentMarkdown:
+      'Clients authenticate with a bearer token and submit `user_id` as a top-level field.',
+    newMarkdown:
+      'Clients authenticate with a bearer token and now submit `actor.id` inside the request body.',
+    oldCode: "const payload = { user_id, token };",
+    newCode: "const payload = { actor: { id: userId }, token, traceId };",
+    reason: 'The request payload changed after the auth middleware introduced the nested actor object.',
+    explanation: 'The documentation was still describing the legacy payload shape, which would cause integration errors.',
+  },
+  {
+    slug: 'webhook-retries',
+    section: 'Webhook Retry Semantics',
+    file: 'docs/integrations/webhooks.md',
+    currentMarkdown:
+      'Webhook deliveries are retried 3 times with a fixed 30 second delay.',
+    newMarkdown:
+      'Webhook deliveries are retried 5 times using exponential backoff starting at 15 seconds.',
+    oldCode: 'retryCount: 3,\nretryDelayMs: 30000,',
+    newCode: 'retryCount: 5,\nbackoff: "exponential",\nretryDelayMs: 15000,',
+    reason: 'The queue worker now applies exponential backoff and the docs were under-reporting retry coverage.',
+    explanation: 'This section was flagged because the operational behavior changed in code but the runbook stayed static.',
+  },
+  {
+    slug: 'error-responses',
+    section: 'Error Response Contract',
+    file: 'docs/api/errors.md',
+    currentMarkdown:
+      'Validation failures return `400` with a `message` field only.',
+    newMarkdown:
+      'Validation failures return `422` with `message`, `code`, and `details` fields for client-side rendering.',
+    oldCode: 'return reply.status(400).send({ message: "Invalid request" });',
+    newCode:
+      'return reply.status(422).send({ message: "Invalid request", code: "VALIDATION_ERROR", details });',
+    reason: 'The backend now emits structured validation errors and the old docs would mislead consumers.',
+    explanation: 'The repair engine aligned the docs with the new structured error contract shipped by the API.',
+  },
+  {
+    slug: 'env-config',
+    section: 'Environment Configuration',
+    file: 'docs/setup/environment.md',
+    currentMarkdown:
+      'Set `API_URL` and `JWT_SECRET` before starting the service.',
+    newMarkdown:
+      'Set `API_URL`, `JWT_SECRET`, `REDIS_URL`, and `DOCS_HEALER_MODE` before starting the service.',
+    oldCode: 'requiredEnv = ["API_URL", "JWT_SECRET"]',
+    newCode: 'requiredEnv = ["API_URL", "JWT_SECRET", "REDIS_URL", "DOCS_HEALER_MODE"]',
+    reason: 'Startup validation now requires more environment variables than the guide currently documents.',
+    explanation: 'The analyzer found newly required environment variables that operators would otherwise miss during deploy.',
+  },
+  {
+    slug: 'background-jobs',
+    section: 'Background Job Lifecycle',
+    file: 'docs/architecture/jobs.md',
+    currentMarkdown:
+      'Background jobs execute sequentially and update the database at the end of processing.',
+    newMarkdown:
+      'Background jobs execute concurrently with checkpoint writes after each completed stage.',
+    oldCode: 'for (const job of jobs) {\n  await process(job)\n}\nawait flushState();',
+    newCode:
+      'await Promise.all(jobs.map(process));\nawait persistCheckpoint("jobs_completed");\nawait flushState();',
+    reason: 'The worker runtime moved to parallel execution and the architecture docs needed an operational update.',
+    explanation: 'This update prevents developers from assuming a sequential workflow that no longer exists.',
+  },
+  {
+    slug: 'rate-limits',
+    section: 'Rate Limit Guidance',
+    file: 'docs/api/rate-limits.md',
+    currentMarkdown:
+      'The public API is limited to 60 requests per minute for every client.',
+    newMarkdown:
+      'The public API is limited to 120 requests per minute for authenticated clients and 30 for anonymous traffic.',
+    oldCode: 'limit: 60,\nwindowMs: 60000,',
+    newCode: 'limit: isAuthenticated ? 120 : 30,\nwindowMs: 60000,',
+    reason: 'Traffic shaping now differs for authenticated and anonymous clients, but the docs still show one limit.',
+    explanation: 'The LLM verification stage marked this as stale because the rate limiter logic now branches by auth state.',
+  },
+] as const;
+
 declare global {
-  // eslint-disable-next-line no-var
   var __docsHealerStore: DashboardStore | undefined;
-  // eslint-disable-next-line no-var
   var __docsHealerProgressListeners: Set<ProgressListener> | undefined;
-  // eslint-disable-next-line no-var
   var __docsHealerScanTimer: ReturnType<typeof setTimeout> | null | undefined;
 }
 
@@ -42,6 +123,228 @@ function getListeners(): Set<ProgressListener> {
     global.__docsHealerProgressListeners = new Set();
   }
   return global.__docsHealerProgressListeners;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hashValue(input: string) {
+  return input.split('').reduce((acc, char) => ((acc * 33) ^ char.charCodeAt(0)) >>> 0, 5381);
+}
+
+function seededUnit(seed: number, offset = 0) {
+  const x = Math.sin(seed + offset * 97) * 10_000;
+  return x - Math.floor(x);
+}
+
+function buildShortSha(seed: number, offset: number) {
+  return Math.floor(seededUnit(seed, offset) * 0xffffffffff)
+    .toString(16)
+    .padStart(10, '0');
+}
+
+function formatAnalyticsDate(date: Date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function summarizeLastScan(date: Date) {
+  const elapsedMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60_000));
+  if (elapsedMinutes < 2) return 'just now';
+  if (elapsedMinutes < 60) return `${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'} ago`;
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours} hour${elapsedHours === 1 ? '' : 's'} ago`;
+  const elapsedDays = Math.round(elapsedHours / 24);
+  return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'} ago`;
+}
+
+function matchesRepository(sectionPath: string, repository: Repository) {
+  return sectionPath.includes(`/${repository.name}/`) || sectionPath.includes(repository.fullName);
+}
+
+function createDemoArtifacts(repository: Repository, scanId: string) {
+  const seed = hashValue(`${repository.id}:${scanId}:${repository.fullName}`);
+  const sectionCount = 4 + Math.floor(seededUnit(seed, 1) * 3);
+  const docSections = clamp(
+    Math.round(Math.max(repository.docSections, 0) + repository.codeChunks / 180 + sectionCount * 4),
+    12,
+    180,
+  );
+  const filesChanged = clamp(3 + Math.floor(seededUnit(seed, 2) * 8), 3, 10);
+  const meaningfulChanges = clamp(2 + Math.floor(seededUnit(seed, 3) * 6), 2, 8);
+  const autoFixedTarget = clamp(1 + Math.floor(seededUnit(seed, 4) * 2), 1, 2);
+  const needsReviewTarget = 1;
+  const verifiedTarget = Math.max(1, sectionCount - autoFixedTarget - needsReviewTarget);
+
+  const sectionStatuses = [
+    ...Array.from({ length: autoFixedTarget }, (): AffectedSection['status'] => 'auto_fixed'),
+    ...Array.from({ length: needsReviewTarget }, (): AffectedSection['status'] => 'needs_review'),
+    ...Array.from({ length: verifiedTarget }, (): AffectedSection['status'] => 'verified'),
+  ].slice(0, sectionCount);
+
+  const sections: AffectedSection[] = sectionStatuses.map((status, index) => {
+    const blueprint = DEMO_SCAN_SECTION_BLUEPRINTS[index % DEMO_SCAN_SECTION_BLUEPRINTS.length];
+    const confidence =
+      status === 'verified'
+        ? clamp(0.9 + seededUnit(seed, index + 8) * 0.07, 0.9, 0.98)
+        : status === 'auto_fixed'
+        ? clamp(0.82 + seededUnit(seed, index + 8) * 0.08, 0.82, 0.94)
+        : clamp(0.7 + seededUnit(seed, index + 8) * 0.08, 0.7, 0.82);
+
+    return {
+      id: `${scanId}-section-${index + 1}`,
+      section: `${blueprint.section} · ${repository.name}`,
+      filePath: `${repository.fullName}/${blueprint.file}`,
+      status,
+      confidence: Number(confidence.toFixed(2)),
+      reason: blueprint.reason,
+      lineStart: 12 + index * 14,
+      lineEnd: 18 + index * 14,
+      currentMarkdown: blueprint.currentMarkdown,
+      newMarkdown: blueprint.newMarkdown,
+      oldCode: blueprint.oldCode,
+      newCode: blueprint.newCode,
+      llmExplanation: blueprint.explanation,
+      changesCount: 1 + Math.floor(seededUnit(seed, index + 20) * 3),
+    };
+  });
+
+  const corrections: AICorrection[] = sections
+    .filter((section) => section.status !== 'verified')
+    .map((section, index) => {
+      const correctionSeed = seededUnit(seed, index + 30);
+      const approved = section.status === 'auto_fixed';
+      return {
+        id: `fix-${repository.name}-${index + 1}`,
+        repository: repository.fullName,
+        section: section.section,
+        reason: section.reason,
+        confidence: section.confidence,
+        status: approved ? 'approved' : correctionSeed > 0.85 ? 'rejected' : 'pending',
+        createdAt: new Date().toISOString(),
+        validationAccuracy: Number(clamp(section.confidence + 0.04, 0.76, 0.98).toFixed(2)),
+        validationStyle: Number(clamp(0.78 + correctionSeed * 0.16, 0.78, 0.94).toFixed(2)),
+        validationCompleteness: Number(clamp(0.8 + correctionSeed * 0.15, 0.8, 0.96).toFixed(2)),
+      };
+    });
+
+  const approvedCorrections = corrections.filter((correction) => correction.status === 'approved');
+  const pendingCorrections = corrections.filter((correction) => correction.status === 'pending');
+  const coverage = clamp(
+    Math.round(48 + docSections * 0.34 + approvedCorrections.length * 8 - pendingCorrections.length * 3),
+    42,
+    96,
+  );
+  const health = clamp(
+    Math.round(52 + coverage * 0.24 + approvedCorrections.length * 6 + verifiedTarget * 3 - pendingCorrections.length * 2),
+    48,
+    97,
+  );
+  const llmCost = Number((0.06 + sectionCount * 0.028 + meaningfulChanges * 0.012).toFixed(2));
+  const tokenUsage = Math.round(7200 + repository.codeChunks * 0.08 + sectionCount * 1800 + meaningfulChanges * 650);
+
+  return {
+    sections,
+    corrections,
+    docSections,
+    filesChanged,
+    meaningfulChanges,
+    approvedCorrections: approvedCorrections.length,
+    pendingCorrections: pendingCorrections.length,
+    coverage,
+    health,
+    llmCost,
+    tokenUsage,
+    cacheHitRatio: Number((0.41 + seededUnit(seed, 40) * 0.29).toFixed(2)),
+    indexBuildDuration: clamp(2 + Math.round(seededUnit(seed, 41) * 7), 2, 9),
+    baseSha: buildShortSha(seed, 42),
+    headSha: buildShortSha(seed, 43),
+    scanAccuracy: Number(clamp(74 + coverage * 0.2 + approvedCorrections.length * 2, 74, 96).toFixed(1)),
+    falsePositive: Number(clamp(11 - approvedCorrections.length * 1.7 - verifiedTarget * 0.8, 2, 11).toFixed(1)),
+    avgConfidence:
+      corrections.length > 0
+        ? Number(
+            (
+              corrections.reduce((sum, correction) => sum + correction.confidence * 100, 0) / corrections.length
+            ).toFixed(1),
+          )
+        : 0,
+  };
+}
+
+function buildDemoPullRequest(
+  repository: Repository,
+  fixesCount: number,
+  createdAt: string,
+  scanId: string,
+  number: number,
+): PullRequest {
+  return {
+    id: `${scanId}-pr`,
+    number,
+    title: `docs: sync ${repository.name} documentation with latest code changes`,
+    repository: repository.fullName,
+    branch: `docs-healer/${repository.name}/scan-${scanId.slice(-4)}`,
+    status: 'open',
+    autoGenerated: true,
+    createdAt,
+    fixesCount,
+    githubUrl: `https://github.com/${repository.fullName}/pull/${number}`,
+    description:
+      `Generated by Docs Healer after detecting stale sections in ${repository.name}. ` +
+      `This PR bundles verified documentation fixes and leaves review-only items out of the patch.`,
+  };
+}
+
+function buildAnalyticsPoint(
+  date: Date,
+  repositoryHealth: number,
+  scan: ScanRun,
+  fixes: number,
+  confidence: number,
+  accuracy: number,
+  falsePositive: number,
+): AnalyticsDataPoint {
+  return {
+    date: formatAnalyticsDate(date),
+    accuracy,
+    fixes,
+    health: repositoryHealth,
+    confidence,
+    falsePositive,
+    processingTime: scan.duration,
+    llmCost: scan.llmCost,
+    tokenUsage: scan.tokenUsage,
+  };
+}
+
+function seedAnalyticsHistory(
+  latestPoint: AnalyticsDataPoint,
+  scan: ScanRun,
+  repositoryHealth: number,
+  fixes: number,
+  confidence: number,
+) {
+  return Array.from({ length: 4 }, (_, index) => {
+    const offset = 4 - index;
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+    const drift = offset * 1.8;
+    return buildAnalyticsPoint(
+      date,
+      clamp(Math.round(repositoryHealth - drift * 1.6), 42, 96),
+      {
+        ...scan,
+        duration: clamp(Math.round(scan.duration + drift), 2, 24),
+        llmCost: Number(clamp(scan.llmCost - offset * 0.01, 0.04, 2).toFixed(2)),
+        tokenUsage: clamp(Math.round(scan.tokenUsage - offset * 1400), 4000, 120_000),
+      },
+      Math.max(0, fixes - offset),
+      Number(clamp(confidence - drift * 1.2, 62, 98).toFixed(1)),
+      Number(clamp(latestPoint.accuracy - drift, 68, 96).toFixed(1)),
+      Number(clamp(latestPoint.falsePositive + offset * 0.7, 2, 14).toFixed(1)),
+    );
+  });
 }
 
 function notifyProgressListeners(store: DashboardStore) {
@@ -58,15 +361,26 @@ async function ensureStoreDir() {
 async function readStoreFile(): Promise<DashboardStore | null> {
   try {
     const raw = await fs.readFile(STORE_PATH, 'utf-8');
-    return JSON.parse(raw) as DashboardStore;
+    return normalizeStore(JSON.parse(raw) as Partial<DashboardStore>);
   } catch {
     return null;
   }
 }
 
+function getPersistedStore(store: DashboardStore): DashboardStore {
+  return {
+    ...store,
+    githubAuth: {
+      ...store.githubAuth,
+      // Keep the OAuth token in memory only so it never lands in git-tracked runtime files.
+      accessToken: null,
+    },
+  };
+}
+
 async function writeStoreFile(store: DashboardStore) {
   await ensureStoreDir();
-  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), 'utf-8');
+  await fs.writeFile(STORE_PATH, JSON.stringify(getPersistedStore(store), null, 2), 'utf-8');
 }
 
 export async function getStore(): Promise<DashboardStore> {
@@ -75,6 +389,53 @@ export async function getStore(): Promise<DashboardStore> {
   const fromDisk = await readStoreFile();
   global.__docsHealerStore = fromDisk ?? createEmptyStore();
   return global.__docsHealerStore;
+}
+
+function normalizeStore(partial: Partial<DashboardStore>): DashboardStore {
+  const base = createEmptyStore();
+  return {
+    ...base,
+    ...partial,
+    githubAuth: {
+      ...base.githubAuth,
+      ...partial.githubAuth,
+    },
+    settings: {
+      ...base.settings,
+      ...partial.settings,
+      github: {
+        ...base.settings.github,
+        ...partial.settings?.github,
+      },
+      ai: {
+        ...base.settings.ai,
+        ...partial.settings?.ai,
+      },
+      notifications: {
+        ...base.settings.notifications,
+        ...partial.settings?.notifications,
+      },
+      security: {
+        ...base.settings.security,
+        ...partial.settings?.security,
+      },
+      githubPermissions: partial.settings?.githubPermissions ?? base.settings.githubPermissions,
+    },
+    pipeline: {
+      ...base.pipeline,
+      ...partial.pipeline,
+      stageStatuses: partial.pipeline?.stageStatuses ?? base.pipeline.stageStatuses,
+    },
+    repositories: partial.repositories ?? base.repositories,
+    affectedSections: partial.affectedSections ?? base.affectedSections,
+    corrections: partial.corrections ?? base.corrections,
+    pullRequests: partial.pullRequests ?? base.pullRequests,
+    scanHistory: partial.scanHistory ?? base.scanHistory,
+    logs: partial.logs ?? base.logs,
+    notifications: partial.notifications ?? base.notifications,
+    analytics: partial.analytics ?? base.analytics,
+    user: partial.user ?? base.user,
+  };
 }
 
 export async function saveStore(store: DashboardStore) {
@@ -130,7 +491,15 @@ export async function getSettings() {
 
 export async function updateSettings(settings: SettingsData) {
   const store = await getStore();
-  store.settings = settings;
+  store.settings = {
+    ...settings,
+    github: {
+      ...settings.github,
+      connected: store.settings.github.connected,
+      tokenMasked: store.settings.github.tokenMasked,
+    },
+    githubPermissions: store.settings.githubPermissions,
+  };
   await saveStore(store);
   return store.settings;
 }
@@ -148,6 +517,66 @@ export async function getDocumentation() {
 export async function markNotificationsRead() {
   const store = await getStore();
   store.notifications = store.notifications.map((notification) => ({ ...notification, read: true }));
+  await saveStore(store);
+  return { success: true };
+}
+
+export async function connectGitHubAccount(connection: GitHubConnectionData) {
+  const store = await getStore();
+  store.githubAuth = {
+    accessToken: connection.accessToken,
+    scopes: connection.scopes,
+    connectedAt: new Date().toISOString(),
+  };
+  store.user = connection.user;
+  store.repositories = connection.repositories;
+  store.settings.github = {
+    ...store.settings.github,
+    ...connection.settingsPatch.github,
+  };
+  store.settings.githubPermissions = connection.settingsPatch.githubPermissions;
+
+  appendLog(store, 'info', `Connected GitHub account ${connection.user.githubUsername}`, 'github');
+  pushNotification(store, {
+    type: 'repo_connected',
+    title: 'GitHub Connected',
+    description: `Connected ${connection.repositories.length} repositories from @${connection.user.githubUsername}`,
+    timestamp: new Date().toISOString(),
+    read: false,
+    repository: connection.repositories[0]?.fullName,
+  });
+
+  await saveStore(store);
+  return buildDashboardSummary(store);
+}
+
+export async function disconnectGitHubAccount() {
+  const store = await getStore();
+  const username = store.user?.githubUsername;
+
+  store.githubAuth = {
+    accessToken: null,
+    scopes: [],
+    connectedAt: null,
+  };
+  store.user = null;
+  store.repositories = [];
+  store.settings.github = {
+    ...store.settings.github,
+    connected: false,
+    tokenMasked: '',
+  };
+  store.settings.githubPermissions = DEFAULT_SETTINGS.githubPermissions;
+
+  appendLog(store, 'warning', 'Disconnected GitHub account', 'github');
+  pushNotification(store, {
+    type: 'github_sync',
+    title: 'GitHub Disconnected',
+    description: username ? `Disconnected @${username} from Docs Healer` : 'GitHub account disconnected',
+    timestamp: new Date().toISOString(),
+    read: false,
+  });
+
   await saveStore(store);
   return { success: true };
 }
@@ -248,7 +677,11 @@ export async function startScan(repositoryId: string) {
     }
 
     const stage = PIPELINE_STAGES[stageIndex];
-    appendLog(currentStore, 'info', stage.description, stage.id);
+    const activeScan = currentStore.scanHistory.find((item) => item.id === scanId);
+    if (activeScan) {
+      activeScan.progress = clamp(Math.round(((stageIndex + 1) / PIPELINE_STAGES.length) * 92), 8, 92);
+    }
+    appendLog(currentStore, 'info', `Running ${stage.label}: ${stage.description}`, stage.id);
     await setPipelineStage(currentStore, stageIndex, 'active', stage.description);
 
     stageIndex += 1;
@@ -265,13 +698,33 @@ async function completeScan(scanId: string, repository: Repository) {
   const scan = store.scanHistory.find((item) => item.id === scanId);
   if (!scan) return;
 
+  const createdAt = new Date();
+  const demoArtifacts = createDemoArtifacts(repository, scanId);
+  const nextPrNumber =
+    store.pullRequests.reduce((max, pullRequest) => Math.max(max, pullRequest.number), 0) + 1;
+  const pullRequest =
+    demoArtifacts.approvedCorrections > 0
+      ? buildDemoPullRequest(repository, demoArtifacts.approvedCorrections, createdAt.toISOString(), scanId, nextPrNumber)
+      : null;
+
   scan.status = 'completed';
   scan.progress = 100;
-  scan.completedAt = new Date().toISOString();
+  scan.completedAt = createdAt.toISOString();
   scan.duration = Math.max(
     1,
     Math.round((new Date(scan.completedAt).getTime() - new Date(scan.startedAt).getTime()) / 1000),
   );
+  scan.filesChanged = demoArtifacts.filesChanged;
+  scan.meaningfulChanges = demoArtifacts.meaningfulChanges;
+  scan.sectionsChecked = demoArtifacts.sections.length;
+  scan.aiFixes = demoArtifacts.approvedCorrections;
+  scan.baseSha = demoArtifacts.baseSha;
+  scan.headSha = demoArtifacts.headSha;
+  scan.cacheHitRatio = demoArtifacts.cacheHitRatio;
+  scan.indexBuildDuration = demoArtifacts.indexBuildDuration;
+  scan.llmCost = demoArtifacts.llmCost;
+  scan.tokenUsage = demoArtifacts.tokenUsage;
+  scan.prNumber = pullRequest?.number;
 
   store.pipeline = {
     isRunning: false,
@@ -281,34 +734,107 @@ async function completeScan(scanId: string, repository: Repository) {
     message: 'Scan completed',
   };
 
-  repository.lastScan = 'just now';
+  repository.lastScan = summarizeLastScan(createdAt);
+  repository.docSections = demoArtifacts.docSections;
+  repository.coverage = demoArtifacts.coverage;
+  repository.health = demoArtifacts.health;
 
-  const analyticsPoint: AnalyticsDataPoint = {
-    date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    accuracy: store.analytics.at(-1)?.accuracy ?? 0,
-    fixes: store.corrections.length,
-    health: repository.health,
-    confidence:
-      store.corrections.length > 0
-        ? store.corrections.reduce((acc, item) => acc + item.confidence, 0) / store.corrections.length
-        : 0,
-    falsePositive: store.analytics.at(-1)?.falsePositive ?? 0,
-    processingTime: scan.duration,
-    llmCost: scan.llmCost,
-    tokenUsage: scan.tokenUsage,
-  };
+  store.affectedSections = [
+    ...demoArtifacts.sections,
+    ...store.affectedSections.filter((section) => !matchesRepository(section.filePath, repository)),
+  ];
+  store.corrections = [
+    ...demoArtifacts.corrections,
+    ...store.corrections.filter((correction) => correction.repository !== repository.fullName),
+  ];
+  store.pullRequests = [
+    ...(pullRequest ? [pullRequest] : []),
+    ...store.pullRequests
+      .map((existingPullRequest) =>
+        existingPullRequest.repository === repository.fullName && existingPullRequest.status === 'open'
+          ? { ...existingPullRequest, status: 'merged' as const }
+          : existingPullRequest,
+      )
+      .filter((existingPullRequest) => existingPullRequest.repository !== repository.fullName),
+  ];
 
-  store.analytics.push(analyticsPoint);
+  const analyticsPoint = buildAnalyticsPoint(
+    createdAt,
+    repository.health,
+    scan,
+    demoArtifacts.corrections.length,
+    demoArtifacts.avgConfidence,
+    demoArtifacts.scanAccuracy,
+    demoArtifacts.falsePositive,
+  );
 
-  appendLog(store, 'info', `Scan completed for ${repository.fullName} in ${scan.duration}s`, 'scan');
+  store.analytics =
+    store.analytics.length < 4
+      ? seedAnalyticsHistory(
+          analyticsPoint,
+          scan,
+          repository.health,
+          demoArtifacts.corrections.length,
+          demoArtifacts.avgConfidence,
+        ).concat(analyticsPoint)
+      : [...store.analytics.slice(-9), analyticsPoint];
+
+  appendLog(
+    store,
+    'info',
+    `Verified ${demoArtifacts.sections.length} documentation sections for ${repository.fullName}`,
+    'verification',
+    { repository: repository.fullName, scanId, averageConfidence: demoArtifacts.avgConfidence },
+  );
+  appendLog(
+    store,
+    'info',
+    `Generated ${demoArtifacts.approvedCorrections} auto-fix patch(es) and ${demoArtifacts.pendingCorrections} review item(s)`,
+    'correction',
+    { repository: repository.fullName, approved: demoArtifacts.approvedCorrections, pending: demoArtifacts.pendingCorrections },
+  );
+  if (pullRequest) {
+    appendLog(
+      store,
+      'info',
+      `Opened PR #${pullRequest.number} for ${repository.fullName}`,
+      'github',
+      { repository: repository.fullName, pullRequest: pullRequest.githubUrl },
+    );
+  }
+  appendLog(store, 'info', `Scan completed for ${repository.fullName} in ${scan.duration}s`, 'scan', {
+    filesChanged: scan.filesChanged,
+    sectionsChecked: scan.sectionsChecked,
+    aiFixes: scan.aiFixes,
+  });
   pushNotification(store, {
     type: 'scan_finished',
     title: 'Scan Completed',
     description: `Scan of ${repository.fullName} completed in ${scan.duration}s`,
-    timestamp: new Date().toISOString(),
+    timestamp: createdAt.toISOString(),
     read: false,
     repository: repository.fullName,
   });
+  if (pullRequest) {
+    pushNotification(store, {
+      type: 'pr_created',
+      title: `PR #${pullRequest.number} opened`,
+      description: `${demoArtifacts.approvedCorrections} documentation fixes are ready in ${repository.name}`,
+      timestamp: createdAt.toISOString(),
+      read: false,
+      repository: repository.fullName,
+    });
+  }
+  if (demoArtifacts.pendingCorrections > 0) {
+    pushNotification(store, {
+      type: 'review_needed',
+      title: 'Manual review required',
+      description: `${demoArtifacts.pendingCorrections} documentation section${demoArtifacts.pendingCorrections === 1 ? '' : 's'} need review in ${repository.name}`,
+      timestamp: createdAt.toISOString(),
+      read: false,
+      repository: repository.fullName,
+    });
+  }
 
   await saveStore(store);
 }

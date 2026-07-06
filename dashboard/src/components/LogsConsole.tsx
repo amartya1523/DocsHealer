@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Terminal, AlertTriangle, Info, XCircle, ArrowDown, Filter } from 'lucide-react';
-import { MOCK_LOGS, type LogEntry, type LogLevel } from '@/data/mockData';
+import { Search, Terminal, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLogs } from '@/lib/api/hooks';
+import type { LogLevel } from '@/lib/types';
+import { QueryState, TableSkeleton } from '@/components/ui/QueryState';
 
 function LogLevelBadge({ level }: { level: LogLevel }) {
   switch (level) {
@@ -33,32 +35,17 @@ export function LogsConsole() {
   const [filter, setFilter] = useState<LogLevel | 'all'>('all');
   const [search, setSearch] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
-  const [visibleLogs, setVisibleLogs] = useState<LogEntry[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Stream logs in one by one
-  useEffect(() => {
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < MOCK_LOGS.length) {
-        setVisibleLogs(prev => [...prev, MOCK_LOGS[i]]);
-        i++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 400);
-    return () => clearInterval(interval);
-  }, []);
+  const { data: logs = [], isLoading, isError, error, refetch } = useLogs();
 
   // Auto-scroll
   useEffect(() => {
     if (autoScroll) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [visibleLogs, autoScroll]);
+  }, [logs, autoScroll]);
 
-  const filtered = visibleLogs.filter(log => {
+  const filtered = logs.filter(log => {
     if (filter !== 'all' && log.level !== filter) return false;
     if (search && !log.message.toLowerCase().includes(search.toLowerCase()) && !log.phase.includes(search.toLowerCase())) return false;
     return true;
@@ -72,8 +59,8 @@ export function LogsConsole() {
           <p className="text-xs text-[#475569] mt-0.5">Structured JSON output from the last workflow run</p>
         </div>
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-green-400">Live</span>
+          <span className={cn('w-2 h-2 rounded-full', logs.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-slate-500')} />
+          <span className={logs.length > 0 ? 'text-green-400' : 'text-slate-500'}>{logs.length > 0 ? 'Streaming' : 'Idle'}</span>
         </div>
       </div>
 
@@ -114,58 +101,70 @@ export function LogsConsole() {
         >
           <ArrowDown className="w-3 h-3" /> Auto-scroll
         </button>
-        <span className="text-[10px] text-[#334155] ml-auto">{filtered.length} / {MOCK_LOGS.length} entries</span>
+        <button
+          onClick={() => void refetch()}
+          className="rounded-lg border border-[#1e1e2e] px-3 py-1.5 text-xs text-[#94a3b8] transition-all hover:bg-white/[0.04]"
+        >
+          Refresh
+        </button>
+        <span className="text-[10px] text-[#334155] ml-auto">{filtered.length} / {logs.length} entries</span>
       </div>
 
-      {/* Terminal */}
-      <div
-        ref={containerRef}
-        className="bg-[#080810] border border-[#1e1e2e] rounded-xl overflow-hidden"
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={logs.length === 0}
+        emptyTitle="No logs available"
+        emptyDescription="The backend log stream is empty right now. Start a scan to populate structured workflow logs."
+        skeleton={<TableSkeleton rows={8} cols={1} />}
       >
-        {/* Terminal header */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#1e1e2e] bg-[#0f0f17]">
-          <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50" />
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500/50" />
+        <div className="bg-[#080810] border border-[#1e1e2e] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#1e1e2e] bg-[#0f0f17]">
+            <div className="flex gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500/50" />
+            </div>
+            <Terminal className="w-3.5 h-3.5 text-[#475569] ml-2" />
+            <span className="text-xs text-[#475569] font-mono">docs-healer — workflow output</span>
           </div>
-          <Terminal className="w-3.5 h-3.5 text-[#475569] ml-2" />
-          <span className="text-xs text-[#475569] font-mono">docs-healer — workflow output</span>
-        </div>
 
-        <div className="h-96 overflow-y-auto terminal-scroll p-4 space-y-1 font-mono text-[11px]">
-          <AnimatePresence>
-            {filtered.map(log => (
-              <motion.div
-                key={log.id}
-                initial={{ opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="log-line flex items-start gap-2 py-0.5 hover:bg-white/[0.02] rounded px-1"
-              >
-                <span className="text-[#334155] shrink-0">
-                  {new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false })}
-                </span>
-                <LogLevelBadge level={log.level} />
-                <PhaseBadge phase={log.phase} />
-                <span className={cn(
-                  'flex-1 break-words',
-                  log.level === 'error' ? 'text-red-300' :
-                  log.level === 'warning' ? 'text-amber-300' :
-                  'text-[#94a3b8]'
-                )}>
-                  {log.message}
-                </span>
-                {log.extra && (
-                  <button className="shrink-0 text-[#334155] hover:text-[#475569] text-[9px] border border-[#1e1e2e] px-1 py-0.5 rounded">
-                    JSON
-                  </button>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          <div ref={bottomRef} />
+          <div className="h-96 overflow-y-auto terminal-scroll p-4 space-y-1 font-mono text-[11px]">
+            <AnimatePresence>
+              {filtered.map(log => (
+                <motion.div
+                  key={log.id}
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="log-line flex items-start gap-2 py-0.5 hover:bg-white/[0.02] rounded px-1"
+                >
+                  <span className="text-[#334155] shrink-0">
+                    {new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false })}
+                  </span>
+                  <LogLevelBadge level={log.level} />
+                  <PhaseBadge phase={log.phase} />
+                  <span className={cn(
+                    'flex-1 break-words',
+                    log.level === 'error' ? 'text-red-300' :
+                    log.level === 'warning' ? 'text-amber-300' :
+                    'text-[#94a3b8]'
+                  )}>
+                    {log.message}
+                  </span>
+                  {log.extra && (
+                    <button className="shrink-0 text-[#334155] hover:text-[#475569] text-[9px] border border-[#1e1e2e] px-1 py-0.5 rounded">
+                      JSON
+                    </button>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            <div ref={bottomRef} />
+          </div>
         </div>
-      </div>
+      </QueryState>
     </div>
   );
 }

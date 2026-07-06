@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  GitBranch, Key, Bell, Shield, Save, RefreshCw,
-  Eye, EyeOff, Check, ChevronRight, Cpu,
-  Lock, Server,
+  GitBranch, Bell, Shield, Save, RefreshCw,
+  Check, Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSettings, useUpdateSettings } from '@/lib/api/hooks';
+import type { SettingsData } from '@/lib/types';
+import { CardListSkeleton, QueryState } from '@/components/ui/QueryState';
+import { GitHubConnectionButton } from '@/components/GitHubConnectionButton';
 
 interface ToggleProps { enabled: boolean; onChange: () => void; }
 function Toggle({ enabled, onChange }: ToggleProps) {
@@ -56,18 +59,50 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.E
 }
 
 export function Settings() {
-  const [showToken, setShowToken] = useState(false);
-  const [autoFix, setAutoFix] = useState(true);
-  const [webhook, setWebhook] = useState(true);
-  const [emailNotif, setEmailNotif] = useState(false);
-  const [slackNotif, setSlackNotif] = useState(true);
-  const [parallelWorkers, setParallelWorkers] = useState(2);
-  const [threshold, setThreshold] = useState(85);
+  const { data, isLoading, isError, error, refetch } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const [draft, setDraft] = useState<SettingsData | null>(null);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    if (!saved) return;
+    const timeout = setTimeout(() => setSaved(false), 2000);
+    return () => clearTimeout(timeout);
+  }, [saved]);
+
+  const currentSettings = draft ?? data ?? null;
+  const isDirty = draft !== null && data ? JSON.stringify(draft) !== JSON.stringify(data) : false;
+
+  const updateDraft = <Section extends keyof SettingsData, Key extends keyof SettingsData[Section]>(
+    section: Section,
+    key: Key,
+    value: SettingsData[Section][Key],
+  ) => {
+    setDraft((current) => {
+      const base = current ?? data;
+      if (!base) return current;
+      return {
+        ...base,
+        [section]: {
+          ...base[section],
+          [key]: value,
+        },
+      };
+    });
+  };
+
   const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!currentSettings || updateSettings.isPending) return;
+    updateSettings.mutate(currentSettings, {
+      onSuccess: () => {
+        setSaved(true);
+        setDraft(null);
+      },
+    });
+  };
+
+  const handleReset = () => {
+    setDraft(null);
   };
 
   return (
@@ -77,153 +112,170 @@ export function Settings() {
           <h2 className="text-lg font-semibold text-white">Settings</h2>
           <p className="text-xs text-[#475569] mt-0.5">Configure Docs Healer for your workspace</p>
         </div>
-        <button
-          onClick={handleSave}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
-            saved ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
-          )}
-        >
-          {saved ? <><Check className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> Save Changes</>}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* GitHub Integration */}
-        <Section title="GitHub Integration" icon={GitBranch}>
-          <div className="space-y-0">
-            <SettingRow label="GitHub App Installation" description="Connected via GitHub App OAuth">
-              <span className="flex items-center gap-1.5 text-xs text-green-400">
-                <span className="w-2 h-2 rounded-full bg-green-400" /> Connected
-              </span>
-            </SettingRow>
-            <SettingRow label="Access Token" description="Personal access token for API calls">
-              <div className="flex items-center gap-2">
-                <code className="text-xs text-[#64748b] bg-[#0a0a0f] px-2 py-1 rounded border border-[#1e1e2e]">
-                  {showToken ? 'ghp_xK9mP2nRvQ7hL4jY8dW3...' : 'ghp_••••••••••••••••••••'}
-                </code>
-                <button onClick={() => setShowToken(!showToken)} className="text-[#475569] hover:text-white">
-                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </SettingRow>
-            <SettingRow label="Auto-fix PRs" description="Create PRs automatically for high-confidence fixes">
-              <Toggle enabled={autoFix} onChange={() => setAutoFix(!autoFix)} />
-            </SettingRow>
-            <SettingRow label="Webhook Events" description="Listen for push and PR events via webhook">
-              <Toggle enabled={webhook} onChange={() => setWebhook(!webhook)} />
-            </SettingRow>
-          </div>
-        </Section>
-
-        {/* AI Configuration */}
-        <Section title="AI Configuration" icon={Cpu}>
-          <div className="space-y-0">
-            <SettingRow label="LLM Model" description="Model used for staleness verification">
-              <select className="bg-[#13131e] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500/40">
-                <option>GPT-4o</option>
-                <option>GPT-4-turbo</option>
-                <option>Claude 3.5 Sonnet</option>
-                <option>Gemini 1.5 Pro</option>
-              </select>
-            </SettingRow>
-            <SettingRow label="Embedding Model" description="Model for semantic vector generation">
-              <select className="bg-[#13131e] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500/40">
-                <option>text-embedding-3-large</option>
-                <option>text-embedding-3-small</option>
-              </select>
-            </SettingRow>
-            <SettingRow label={`Auto-fix Threshold: ${threshold}%`} description="Minimum confidence to auto-apply fixes">
-              <div className="flex items-center gap-2">
-                <input
-                  type="range" min={60} max={99} value={threshold}
-                  onChange={e => setThreshold(Number(e.target.value))}
-                  className="w-24 accent-blue-500"
-                />
-                <span className="text-xs font-mono text-blue-400 w-8">{threshold}%</span>
-              </div>
-            </SettingRow>
-            <SettingRow label={`Parallel Workers: ${parallelWorkers}`} description="Concurrent LLM verification threads">
-              <div className="flex items-center gap-2">
-                <input
-                  type="range" min={1} max={8} value={parallelWorkers}
-                  onChange={e => setParallelWorkers(Number(e.target.value))}
-                  className="w-24 accent-blue-500"
-                />
-                <span className="text-xs font-mono text-blue-400 w-4">{parallelWorkers}</span>
-              </div>
-            </SettingRow>
-          </div>
-        </Section>
-
-        {/* Notifications */}
-        <Section title="Notifications" icon={Bell}>
-          <div className="space-y-0">
-            <SettingRow label="Email Notifications" description="Receive email on scan completion">
-              <Toggle enabled={emailNotif} onChange={() => setEmailNotif(!emailNotif)} />
-            </SettingRow>
-            <SettingRow label="Slack Integration" description="Post scan summaries to Slack">
-              <Toggle enabled={slackNotif} onChange={() => setSlackNotif(!slackNotif)} />
-            </SettingRow>
-            <SettingRow label="Slack Webhook URL" description="Incoming webhook for notifications">
-              <input
-                type="text"
-                defaultValue="https://hooks.slack.com/services/T0..."
-                className="bg-[#0a0a0f] border border-[#1e1e2e] text-[#64748b] text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500/40 w-52 font-mono"
-              />
-            </SettingRow>
-            <SettingRow label="Notify on Review Needed" description="Alert when fixes need manual review">
-              <Toggle enabled={true} onChange={() => {}} />
-            </SettingRow>
-          </div>
-        </Section>
-
-        {/* Security */}
-        <Section title="Security & Permissions" icon={Shield}>
-          <div className="space-y-0">
-            <SettingRow label="Webhook Secret" description="HMAC secret for GitHub webhook validation">
-              <div className="flex items-center gap-2">
-                <code className="text-xs text-[#64748b] bg-[#0a0a0f] px-2 py-1 rounded border border-[#1e1e2e]">
-                  whs_••••••••••••••••
-                </code>
-                <button className="text-[#475569] hover:text-white">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </SettingRow>
-            <SettingRow label="API Rate Limiting" description="Max API calls per minute">
-              <select className="bg-[#13131e] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-3 py-1.5 focus:outline-none">
-                <option>60 req/min</option>
-                <option>120 req/min</option>
-                <option>300 req/min</option>
-              </select>
-            </SettingRow>
-            <SettingRow label="Audit Logging" description="Log all automated actions to audit trail">
-              <Toggle enabled={true} onChange={() => {}} />
-            </SettingRow>
-            <SettingRow label="Cache TTL (hours)" description="How long to cache index builds">
-              <input
-                type="number" defaultValue={24}
-                className="bg-[#0a0a0f] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500/40 w-20 font-mono"
-              />
-            </SettingRow>
-          </div>
-        </Section>
-      </div>
-
-      {/* Danger Zone */}
-      <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-red-400 mb-3">Danger Zone</h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-[#e2e8f0]">Reset All Indexes</div>
-            <div className="text-xs text-[#475569] mt-0.5">Clears all cached embeddings. Will re-index all repositories on next scan.</div>
-          </div>
-          <button className="px-4 py-2 rounded-lg border border-red-500/30 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-all">
-            Reset Indexes
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReset}
+            disabled={!isDirty}
+            className="flex items-center gap-2 rounded-2xl border border-white/8 px-4 py-2 text-sm font-medium text-slate-300 transition-all hover:bg-white/[0.05] disabled:opacity-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reset
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!draft || updateSettings.isPending || !isDirty}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-medium transition-all disabled:opacity-50',
+              saved ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
+            )}
+          >
+            {saved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> {updateSettings.isPending ? 'Saving...' : 'Save Changes'}</>}
           </button>
         </div>
       </div>
+
+      <QueryState
+        isLoading={isLoading || !currentSettings}
+        isError={isError}
+        error={(updateSettings.error as Error | null) ?? error}
+        onRetry={() => refetch()}
+        skeleton={<CardListSkeleton count={4} />}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Section title="GitHub Integration" icon={GitBranch}>
+            <div className="space-y-0">
+              <SettingRow label="Connection Actions" description="Start or revoke the GitHub OAuth connection for this dashboard">
+                <GitHubConnectionButton connected={currentSettings?.github.connected ?? false} />
+              </SettingRow>
+              <SettingRow label="GitHub App Installation" description="Connection state reported by backend">
+                <span className={cn('flex items-center gap-1.5 text-xs', currentSettings?.github.connected ? 'text-green-400' : 'text-amber-400')}>
+                  <span className={cn('w-2 h-2 rounded-full', currentSettings?.github.connected ? 'bg-green-400' : 'bg-amber-400')} />
+                  {currentSettings?.github.connected ? 'Connected' : 'Disconnected'}
+                </span>
+              </SettingRow>
+              <SettingRow label="Access Token" description="Masked token returned by backend">
+                <code className="text-xs text-[#64748b] bg-[#0a0a0f] px-2 py-1 rounded border border-[#1e1e2e]">
+                  {currentSettings?.github.tokenMasked || '—'}
+                </code>
+              </SettingRow>
+              <SettingRow label="Auto-fix PRs" description="Create PRs automatically for high-confidence fixes">
+                <Toggle enabled={currentSettings?.github.autoFixPrs ?? false} onChange={() => updateDraft('github', 'autoFixPrs', !(currentSettings?.github.autoFixPrs ?? false))} />
+              </SettingRow>
+              <SettingRow label="Webhook Events" description="Listen for push and PR events via webhook">
+                <Toggle enabled={currentSettings?.github.webhookEvents ?? false} onChange={() => updateDraft('github', 'webhookEvents', !(currentSettings?.github.webhookEvents ?? false))} />
+              </SettingRow>
+            </div>
+          </Section>
+
+          <Section title="AI Configuration" icon={Cpu}>
+            <div className="space-y-0">
+              <SettingRow label="LLM Model" description="Model used for staleness verification">
+                <input
+                  type="text"
+                  value={currentSettings?.ai.llmModel ?? ''}
+                  onChange={(e) => updateDraft('ai', 'llmModel', e.target.value)}
+                  className="bg-[#13131e] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500/40 w-52"
+                />
+              </SettingRow>
+              <SettingRow label="Embedding Model" description="Model for semantic vector generation">
+                <input
+                  type="text"
+                  value={currentSettings?.ai.embeddingModel ?? ''}
+                  onChange={(e) => updateDraft('ai', 'embeddingModel', e.target.value)}
+                  className="bg-[#13131e] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500/40 w-52"
+                />
+              </SettingRow>
+              <SettingRow label="Auto-fix Threshold" description="Minimum confidence to auto-apply fixes">
+                <input
+                  type="number"
+                  value={currentSettings?.ai.autoFixThreshold ?? 0}
+                  onChange={(e) => updateDraft('ai', 'autoFixThreshold', Number(e.target.value))}
+                  className="bg-[#0a0a0f] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500/40 w-24 font-mono"
+                />
+              </SettingRow>
+              <SettingRow label="Parallel Workers" description="Concurrent LLM verification threads">
+                <input
+                  type="number"
+                  value={currentSettings?.ai.parallelWorkers ?? 0}
+                  onChange={(e) => updateDraft('ai', 'parallelWorkers', Number(e.target.value))}
+                  className="bg-[#0a0a0f] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500/40 w-24 font-mono"
+                />
+              </SettingRow>
+            </div>
+          </Section>
+
+          <Section title="Notifications" icon={Bell}>
+            <div className="space-y-0">
+              <SettingRow label="Email Notifications" description="Receive email on scan completion">
+                <Toggle enabled={currentSettings?.notifications.email ?? false} onChange={() => updateDraft('notifications', 'email', !(currentSettings?.notifications.email ?? false))} />
+              </SettingRow>
+              <SettingRow label="Slack Integration" description="Post scan summaries to Slack">
+                <Toggle enabled={currentSettings?.notifications.slack ?? false} onChange={() => updateDraft('notifications', 'slack', !(currentSettings?.notifications.slack ?? false))} />
+              </SettingRow>
+              <SettingRow label="Slack Webhook URL" description="Incoming webhook for notifications">
+                <input
+                  type="text"
+                  value={currentSettings?.notifications.slackWebhookUrl ?? ''}
+                  onChange={(e) => updateDraft('notifications', 'slackWebhookUrl', e.target.value)}
+                  className="bg-[#0a0a0f] border border-[#1e1e2e] text-[#64748b] text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500/40 w-60 font-mono"
+                />
+              </SettingRow>
+              <SettingRow label="Notify on Review Needed" description="Alert when fixes need manual review">
+                <Toggle enabled={currentSettings?.notifications.notifyOnReview ?? false} onChange={() => updateDraft('notifications', 'notifyOnReview', !(currentSettings?.notifications.notifyOnReview ?? false))} />
+              </SettingRow>
+            </div>
+          </Section>
+
+          <Section title="Security & Permissions" icon={Shield}>
+            <div className="space-y-0">
+              <SettingRow label="Webhook Secret" description="Masked HMAC secret from backend">
+                <code className="text-xs text-[#64748b] bg-[#0a0a0f] px-2 py-1 rounded border border-[#1e1e2e]">
+                  {currentSettings?.security.webhookSecretMasked || '—'}
+                </code>
+              </SettingRow>
+              <SettingRow label="API Rate Limiting" description="Max API calls per minute">
+                <input
+                  type="text"
+                  value={currentSettings?.security.rateLimit ?? ''}
+                  onChange={(e) => updateDraft('security', 'rateLimit', e.target.value)}
+                  className="bg-[#13131e] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500/40 w-28"
+                />
+              </SettingRow>
+              <SettingRow label="Audit Logging" description="Log all automated actions to audit trail">
+                <Toggle enabled={currentSettings?.security.auditLogging ?? false} onChange={() => updateDraft('security', 'auditLogging', !(currentSettings?.security.auditLogging ?? false))} />
+              </SettingRow>
+              <SettingRow label="Cache TTL (hours)" description="How long to cache index builds">
+                <input
+                  type="number"
+                  value={currentSettings?.security.cacheTtlHours ?? 0}
+                  onChange={(e) => updateDraft('security', 'cacheTtlHours', Number(e.target.value))}
+                  className="bg-[#0a0a0f] border border-[#1e1e2e] text-[#94a3b8] text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500/40 w-20 font-mono"
+                />
+              </SettingRow>
+            </div>
+          </Section>
+        </div>
+
+        <div className="bg-[#0f0f17] border border-[#1e1e2e] rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-white mb-4">GitHub App Permissions</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {currentSettings?.githubPermissions.map((permission) => (
+              <div key={permission.scope} className="flex items-center gap-3 p-3 bg-[#0a0a0f] rounded-lg border border-[#1e1e2e]">
+                <div className={cn(
+                  'w-6 h-6 rounded-full flex items-center justify-center shrink-0',
+                  permission.granted ? 'bg-green-500/15' : 'bg-amber-500/15'
+                )}>
+                  <Check className={cn('w-3.5 h-3.5', permission.granted ? 'text-green-400' : 'text-amber-300')} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <code className="text-xs font-mono text-blue-400">{permission.scope}</code>
+                  <p className="text-[10px] text-[#475569] mt-0.5">{permission.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </QueryState>
     </div>
   );
 }

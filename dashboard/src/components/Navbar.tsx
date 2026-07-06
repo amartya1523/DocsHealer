@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Search, Bell, RefreshCw, Play, ChevronDown, GitBranch, X, Check,
-  GitPullRequest, Eye, AlertTriangle, Wifi, Loader2,
+  GitPullRequest, AlertTriangle, Wifi, Loader2,
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';

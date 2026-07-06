@@ -149,3 +149,19 @@ export function useMarkNotificationsRead() {
     },
   });
 }
+
+export function useDisconnectGitHub() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiPost<{ success: boolean }>('/api/github/disconnect'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.summary });
+      queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      queryClient.invalidateQueries({ queryKey: queryKeys.documentation });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history });
+      queryClient.invalidateQueries({ queryKey: queryKeys.logs });
+    },
+  });
+}

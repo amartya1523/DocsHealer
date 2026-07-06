@@ -2,8 +2,10 @@
 
 import { motion } from 'framer-motion';
 import { GitPullRequest, GitMerge, XCircle, ExternalLink, Clock, Sparkles } from 'lucide-react';
-import { PULL_REQUESTS, type PullRequest, type PRStatus } from '@/data/mockData';
 import { cn, formatDate } from '@/lib/utils';
+import { usePullRequests } from '@/lib/api/hooks';
+import type { PRStatus } from '@/lib/types';
+import { CardListSkeleton, QueryState } from '@/components/ui/QueryState';
 
 function PRStatusBadge({ status }: { status: PRStatus }) {
   switch (status) {
@@ -26,6 +28,8 @@ function PRStatusBadge({ status }: { status: PRStatus }) {
 }
 
 export function PullRequests() {
+  const { data: pullRequests = [], isLoading, isError, error, refetch } = usePullRequests();
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -34,74 +38,85 @@ export function PullRequests() {
           <p className="text-xs text-[#475569] mt-0.5">Auto-generated documentation fix PRs</p>
         </div>
         <div className="flex gap-3 text-xs">
-          <span className="text-green-400">{PULL_REQUESTS.filter(p => p.status === 'open').length} open</span>
-          <span className="text-purple-400">{PULL_REQUESTS.filter(p => p.status === 'merged').length} merged</span>
+          <span className="text-green-400">{pullRequests.filter(p => p.status === 'open').length} open</span>
+          <span className="text-purple-400">{pullRequests.filter(p => p.status === 'merged').length} merged</span>
         </div>
       </div>
 
-      <div className="grid gap-4">
-        {PULL_REQUESTS.map((pr, i) => (
-          <motion.div
-            key={pr.id}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-            className="bg-[#0f0f17] border border-[#1e1e2e] rounded-xl p-5 hover:border-[#2a2a3e] transition-all"
-          >
-            <div className="flex items-start gap-4">
-              <div className={cn(
-                'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                pr.status === 'open' ? 'bg-green-500/10 text-green-400'
-                  : pr.status === 'merged' ? 'bg-purple-500/10 text-purple-400'
-                  : 'bg-red-500/10 text-red-400'
-              )}>
-                {pr.status === 'merged' ? <GitMerge className="w-5 h-5" /> : <GitPullRequest className="w-5 h-5" />}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-4 mb-1">
-                  <h4 className="text-sm font-semibold text-white leading-snug">{pr.title}</h4>
-                  <PRStatusBadge status={pr.status} />
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={pullRequests.length === 0}
+        emptyTitle="No pull requests yet"
+        emptyDescription="When the backend opens documentation PRs, they’ll appear here with live status."
+        skeleton={<CardListSkeleton count={4} />}
+      >
+        <div className="grid gap-4">
+          {pullRequests.map((pr, i) => (
+            <motion.div
+              key={pr.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07 }}
+              className="rounded-[24px] border border-[#1e1e2e] bg-[linear-gradient(180deg,rgba(15,15,23,0.98),rgba(11,18,32,0.92))] p-5 hover:border-[#2a2a3e] transition-all"
+            >
+              <div className="flex items-start gap-4">
+                <div className={cn(
+                  'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+                  pr.status === 'open' ? 'bg-green-500/10 text-green-400'
+                    : pr.status === 'merged' ? 'bg-purple-500/10 text-purple-400'
+                    : 'bg-red-500/10 text-red-400'
+                )}>
+                  {pr.status === 'merged' ? <GitMerge className="w-5 h-5" /> : <GitPullRequest className="w-5 h-5" />}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 mt-2">
-                  <span className="text-xs text-[#64748b]">{pr.repository}</span>
-                  <span className="text-[#2a2a3e]">·</span>
-                  <code className="text-[10px] text-[#475569] bg-[#1e1e2e] px-1.5 py-0.5 rounded">
-                    {pr.branch.slice(0, 40)}...
-                  </code>
-                </div>
-
-                <p className="text-xs text-[#475569] mt-2 leading-relaxed">{pr.description}</p>
-
-                <div className="flex items-center gap-4 mt-3">
-                  <div className="flex items-center gap-1.5 text-[10px] text-[#334155]">
-                    <Clock className="w-3 h-3" />
-                    {formatDate(pr.createdAt)}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-4 mb-1">
+                    <h4 className="text-sm font-semibold text-white leading-snug">{pr.title}</h4>
+                    <PRStatusBadge status={pr.status} />
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] text-[#475569]">
-                    <Sparkles className="w-3 h-3 text-blue-400" />
-                    {pr.fixesCount} fix{pr.fixesCount !== 1 ? 'es' : ''} applied
+
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                    <span className="text-xs text-[#64748b]">{pr.repository}</span>
+                    <span className="text-[#2a2a3e]">·</span>
+                    <code className="text-[10px] text-[#475569] bg-[#1e1e2e] px-1.5 py-0.5 rounded">
+                      {pr.branch.slice(0, 40)}...
+                    </code>
                   </div>
-                  {pr.autoGenerated && (
-                    <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-full">
-                      Auto Generated
-                    </span>
-                  )}
-                  <a
-                    href={pr.githubUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-all"
-                  >
-                    #{pr.number} <ExternalLink className="w-3 h-3" />
-                  </a>
+
+                  <p className="text-xs text-[#475569] mt-2 leading-relaxed">{pr.description}</p>
+
+                  <div className="flex items-center gap-4 mt-3">
+                    <div className="flex items-center gap-1.5 text-[10px] text-[#334155]">
+                      <Clock className="w-3 h-3" />
+                      {formatDate(pr.createdAt)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-[#475569]">
+                      <Sparkles className="w-3 h-3 text-blue-400" />
+                      {pr.fixesCount} fix{pr.fixesCount !== 1 ? 'es' : ''} applied
+                    </div>
+                    {pr.autoGenerated && (
+                      <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-full">
+                        Auto Generated
+                      </span>
+                    )}
+                    <a
+                      href={pr.githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-all"
+                    >
+                      #{pr.number} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+            </motion.div>
+          ))}
+        </div>
+      </QueryState>
     </div>
   );
 }

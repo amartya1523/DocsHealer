@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, AlertTriangle, Sparkles, ChevronRight, X, Check, Edit3,
-  FileText, Code2, GitCompare, Brain, ExternalLink,
+  FileText, GitCompare, Brain, ExternalLink,
 } from 'lucide-react';
-import { AFFECTED_SECTIONS, type AffectedSection, type DocStatus } from '@/data/mockData';
+import { useAffectedDocs } from '@/lib/api/hooks';
+import type { AffectedSection, DocStatus } from '@/lib/types';
 import { cn, confidenceColor } from '@/lib/utils';
+import { QueryState, TableSkeleton } from '@/components/ui/QueryState';
 
 function StatusBadge({ status }: { status: DocStatus }) {
   switch (status) {
@@ -211,22 +213,30 @@ function DetailDrawer({ section, onClose }: { section: AffectedSection; onClose:
   );
 }
 
-export function AffectedDocs() {
-  const [selectedSection, setSelectedSection] = useState<AffectedSection | null>(null);
+interface AffectedDocsProps {
+  selectedRepo?: string;
+}
+
+export function AffectedDocs({ selectedRepo }: AffectedDocsProps) {
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const { data: sections = [], isLoading, isError, error, refetch } = useAffectedDocs(selectedRepo);
+  const selectedSection = sections.find((section) => section.id === selectedSectionId) ?? null;
+
+  const statusSummary = [
+    { label: 'Verified', color: 'text-green-400 bg-green-400/10', count: sections.filter((s) => s.status === 'verified').length },
+    { label: 'Needs Review', color: 'text-amber-400 bg-amber-400/10', count: sections.filter((s) => s.status === 'needs_review').length },
+    { label: 'Auto Fixed', color: 'text-blue-400 bg-blue-400/10', count: sections.filter((s) => s.status === 'auto_fixed').length },
+  ];
 
   return (
     <div className="relative bg-[#0f0f17] border border-[#1e1e2e] rounded-xl overflow-hidden mb-6">
       <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e2e]">
         <div>
           <h3 className="text-sm font-semibold text-white">Affected Documentation</h3>
-          <p className="text-xs text-[#475569] mt-0.5">{AFFECTED_SECTIONS.length} sections linked to changed code chunks</p>
+          <p className="text-xs text-[#475569] mt-0.5">{sections.length} sections linked to changed code chunks</p>
         </div>
         <div className="flex gap-2">
-          {[
-            { label: 'Verified', color: 'text-green-400 bg-green-400/10', count: AFFECTED_SECTIONS.filter(s => s.status === 'verified').length },
-            { label: 'Needs Review', color: 'text-amber-400 bg-amber-400/10', count: AFFECTED_SECTIONS.filter(s => s.status === 'needs_review').length },
-            { label: 'Auto Fixed', color: 'text-blue-400 bg-blue-400/10', count: AFFECTED_SECTIONS.filter(s => s.status === 'auto_fixed').length },
-          ].map(({ label, color, count }) => (
+          {statusSummary.map(({ label, color, count }) => (
             <span key={label} className={cn('text-[10px] font-medium px-2 py-1 rounded-full', color)}>
               {count} {label}
             </span>
@@ -234,60 +244,71 @@ export function AffectedDocs() {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[#1e1e2e]">
-              {['Section', 'Status', 'Confidence', 'Reason', 'Action'].map(h => (
-                <th key={h} className="text-left text-[10px] font-medium text-[#475569] uppercase tracking-wider px-5 py-2.5">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {AFFECTED_SECTIONS.map((sec, i) => {
-              const color = confidenceColor(sec.confidence);
-              return (
-                <motion.tr
-                  key={sec.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  onClick={() => setSelectedSection(sec)}
-                  className="table-row-hover border-b border-[#0a0a0f] cursor-pointer transition-all"
-                >
-                  <td className="px-5 py-3">
-                    <div className="text-sm font-medium text-[#e2e8f0] max-w-[220px] truncate">{sec.section}</div>
-                    <div className="text-[10px] text-[#475569] mt-0.5 truncate">{sec.filePath}</div>
-                  </td>
-                  <td className="px-5 py-3">
-                    <StatusBadge status={sec.status} />
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1 bg-[#1e1e2e] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${sec.confidence * 100}%`, background: color }} />
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={sections.length === 0}
+        emptyTitle="No affected documentation"
+        emptyDescription="Run a scan and the backend will populate impacted documentation sections here."
+        skeleton={<TableSkeleton rows={5} cols={5} />}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#1e1e2e]">
+                {['Section', 'Status', 'Confidence', 'Reason', 'Action'].map(h => (
+                  <th key={h} className="text-left text-[10px] font-medium text-[#475569] uppercase tracking-wider px-5 py-2.5">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sections.map((sec, i) => {
+                const color = confidenceColor(sec.confidence);
+                return (
+                  <motion.tr
+                    key={sec.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => setSelectedSectionId(sec.id)}
+                    className="table-row-hover border-b border-[#0a0a0f] cursor-pointer transition-all"
+                  >
+                    <td className="px-5 py-3">
+                      <div className="text-sm font-medium text-[#e2e8f0] max-w-[220px] truncate">{sec.section}</div>
+                      <div className="text-[10px] text-[#475569] mt-0.5 truncate">{sec.filePath}</div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <StatusBadge status={sec.status} />
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1 bg-[#1e1e2e] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${sec.confidence * 100}%`, background: color }} />
+                        </div>
+                        <span className="text-xs font-mono font-medium" style={{ color }}>
+                          {(sec.confidence * 100).toFixed(0)}%
+                        </span>
                       </div>
-                      <span className="text-xs font-mono font-medium" style={{ color }}>
-                        {(sec.confidence * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3">
-                    <p className="text-xs text-[#64748b] max-w-[240px] leading-relaxed line-clamp-2">{sec.reason}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <button className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-all">
-                      View <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </motion.tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <p className="text-xs text-[#64748b] max-w-[240px] leading-relaxed line-clamp-2">{sec.reason}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <button className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-all">
+                        View <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </QueryState>
 
       {/* Drawer */}
       <AnimatePresence>
@@ -298,9 +319,9 @@ export function AffectedDocs() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
-              onClick={() => setSelectedSection(null)}
+              onClick={() => setSelectedSectionId(null)}
             />
-            <DetailDrawer section={selectedSection} onClose={() => setSelectedSection(null)} />
+            <DetailDrawer section={selectedSection} onClose={() => setSelectedSectionId(null)} />
           </>
         )}
       </AnimatePresence>
