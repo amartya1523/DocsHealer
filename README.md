@@ -1,3 +1,5 @@
+
+
 # DocsHealer 🩺📚
 
 <div align="center">
@@ -29,7 +31,12 @@ DocsHealer is an intelligent documentation maintenance system that automatically
 - **Review Overhead**: Reviewers struggle to catch documentation inconsistencies
 - **False Negatives**: Simple text search can't detect semantic staleness
 
-### The Solution
+### The Solution<img width="1024" height="572" alt="f814112e-7110-4659-a315-34c9db33516f" src="https://github.com/user-attachments/assets/02600f93-f857-4786-813d-0002873c8abb" />
+
+
+https://github.com/user-attachments/assets/b2b04be4-0048-4a23-979c-0d9007c3d434
+
+
 
 DocsHealer uses a **9-stage AI pipeline** to:
 
