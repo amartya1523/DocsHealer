@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useState } from 'react';
+import { Suspense, startTransition, useEffect, useRef, useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Navbar } from '@/components/Navbar';
 import { Hero } from '@/components/Hero';
@@ -21,14 +21,19 @@ import { useRepositories, useRunScan } from '@/lib/api/hooks';
 import { useScanProgress } from '@/hooks/useScanProgress';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/api/query-keys';
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedRepo, setSelectedRepo] = useState<string>('');
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { data: repositories = [] } = useRepositories();
   const runScan = useRunScan();
   const { progress } = useScanProgress();
+  const previousRunningRef = useRef(false);
+  const previousStageRef = useRef(-1);
   const isScanning = progress.isRunning || runScan.isPending;
   const selectedRepoId = repositories.some((repo) => repo.id === selectedRepo)
     ? selectedRepo
@@ -36,6 +41,38 @@ export default function DashboardPage() {
   const selectedRepository = repositories.find((repo) => repo.id === selectedRepoId) ?? null;
   const githubStatus = searchParams.get('github');
   const githubError = searchParams.get('github_error');
+
+  useEffect(() => {
+    if (progress.isRunning && progress.activeStageIndex !== previousStageRef.current) {
+      previousStageRef.current = progress.activeStageIndex;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.history });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.logs });
+    }
+
+    if (!progress.isRunning) {
+      previousStageRef.current = -1;
+    }
+  }, [progress.activeStageIndex, progress.isRunning, queryClient]);
+
+  useEffect(() => {
+    if (previousRunningRef.current && !progress.isRunning) {
+      [
+        queryKeys.summary,
+        queryKeys.analytics,
+        queryKeys.history,
+        queryKeys.corrections,
+        queryKeys.pullRequests,
+        queryKeys.logs,
+        queryKeys.repositories,
+        queryKeys.documentation,
+        queryKeys.affectedDocs(selectedRepoId),
+      ].forEach((queryKey) => {
+        void queryClient.invalidateQueries({ queryKey });
+      });
+    }
+
+    previousRunningRef.current = progress.isRunning;
+  }, [progress.isRunning, queryClient, selectedRepoId]);
 
   const handleRunScan = async () => {
     if (!selectedRepository || isScanning) return;
@@ -131,5 +168,13 @@ export default function DashboardPage() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="h-screen bg-[#0a0a0f]" />}>
+      <DashboardPageContent />
+    </Suspense>
   );
 }

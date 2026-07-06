@@ -96,12 +96,30 @@ function parseScopes(raw: string | null): string[] {
     .filter(Boolean);
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hashRepositoryName(value: string): number {
+  return value.split('').reduce((acc, char) => ((acc * 31) ^ char.charCodeAt(0)) >>> 0, 0);
+}
+
 function calculateHealth(repo: GitHubRepositoryResponse): number {
-  const freshnessBoost = repo.archived ? -25 : 10;
-  const starsBoost = Math.min(repo.stargazers_count / 40, 30);
-  const issuesPenalty = Math.min(repo.open_issues_count * 2, 30);
-  const forksBoost = Math.min(repo.forks_count / 20, 15);
-  return Math.max(20, Math.min(98, Math.round(55 + freshnessBoost + starsBoost + forksBoost - issuesPenalty)));
+  const freshnessDays = repo.pushed_at
+    ? Math.max(0, Math.round((Date.now() - new Date(repo.pushed_at).getTime()) / 86_400_000))
+    : 180;
+  const freshnessScore =
+    freshnessDays <= 3 ? 24 : freshnessDays <= 14 ? 18 : freshnessDays <= 45 ? 12 : freshnessDays <= 90 ? 7 : 2;
+  const engagementScore = Math.min(repo.stargazers_count * 1.4, 18) + Math.min(repo.forks_count * 1.8, 12);
+  const repoSizeScore = Math.min(Math.log10(repo.size + 10) * 9, 12);
+  const maintenancePenalty = Math.min(repo.open_issues_count * 1.4, 18) + (repo.archived ? 18 : 0);
+  const variance = (hashRepositoryName(repo.full_name) % 13) - 6;
+
+  return clamp(
+    Math.round(44 + freshnessScore + engagementScore + repoSizeScore + variance - maintenancePenalty),
+    28,
+    97,
+  );
 }
 
 function calculateCoverage(repo: GitHubRepositoryResponse): number {

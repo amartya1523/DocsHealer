@@ -190,7 +190,7 @@ export function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} />
-                  <Tooltip {...tooltipStyle} formatter={(v: number) => [formatCost(v), 'LLM Cost']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [formatCost(Number(v ?? 0)), 'LLM Cost']} />
                   <Bar dataKey="llmCost" fill="#06b6d4" radius={[3, 3, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
@@ -210,7 +210,7 @@ export function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip {...tooltipStyle} formatter={(v: number) => [`${(v / 1000).toFixed(1)}k`, 'Tokens']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${(Number(v ?? 0) / 1000).toFixed(1)}k`, 'Tokens']} />
                   <Area type="monotone" dataKey="tokenUsage" stroke="#f59e0b" strokeWidth={2} fill="url(#tokenGrad)" dot={false} />
                 </AreaChart>
               </ResponsiveContainer>

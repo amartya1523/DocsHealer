@@ -149,7 +149,8 @@ function formatAnalyticsDate(date: Date) {
 }
 
 function summarizeLastScan(date: Date) {
-  const elapsedMinutes = Math.max(1, Math.round((Date.now() - date.getTime()) / 60_000));
+  const elapsedMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60_000));
+  if (elapsedMinutes < 2) return 'just now';
   if (elapsedMinutes < 60) return `${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'} ago`;
   const elapsedHours = Math.round(elapsedMinutes / 60);
   if (elapsedHours < 24) return `${elapsedHours} hour${elapsedHours === 1 ? '' : 's'} ago`;
@@ -175,10 +176,10 @@ function createDemoArtifacts(repository: Repository, scanId: string) {
   const needsReviewTarget = 1;
   const verifiedTarget = Math.max(1, sectionCount - autoFixedTarget - needsReviewTarget);
 
-  const sectionStatuses: AffectedSection['status'][] = [
-    ...Array.from({ length: autoFixedTarget }, () => 'auto_fixed' as const),
-    'needs_review',
-    ...Array.from({ length: verifiedTarget }, () => 'verified' as const),
+  const sectionStatuses = [
+    ...Array.from({ length: autoFixedTarget }, (): AffectedSection['status'] => 'auto_fixed'),
+    ...Array.from({ length: needsReviewTarget }, (): AffectedSection['status'] => 'needs_review'),
+    ...Array.from({ length: verifiedTarget }, (): AffectedSection['status'] => 'verified'),
   ].slice(0, sectionCount);
 
   const sections: AffectedSection[] = sectionStatuses.map((status, index) => {
@@ -324,7 +325,7 @@ function seedAnalyticsHistory(
   fixes: number,
   confidence: number,
 ) {
-  return Array.from({ length: 5 }, (_, index) => {
+  return Array.from({ length: 4 }, (_, index) => {
     const offset = 4 - index;
     const date = new Date();
     date.setDate(date.getDate() - offset);
@@ -366,9 +367,20 @@ async function readStoreFile(): Promise<DashboardStore | null> {
   }
 }
 
+function getPersistedStore(store: DashboardStore): DashboardStore {
+  return {
+    ...store,
+    githubAuth: {
+      ...store.githubAuth,
+      // Keep the OAuth token in memory only so it never lands in git-tracked runtime files.
+      accessToken: null,
+    },
+  };
+}
+
 async function writeStoreFile(store: DashboardStore) {
   await ensureStoreDir();
-  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), 'utf-8');
+  await fs.writeFile(STORE_PATH, JSON.stringify(getPersistedStore(store), null, 2), 'utf-8');
 }
 
 export async function getStore(): Promise<DashboardStore> {
@@ -665,7 +677,11 @@ export async function startScan(repositoryId: string) {
     }
 
     const stage = PIPELINE_STAGES[stageIndex];
-    appendLog(currentStore, 'info', stage.description, stage.id);
+    const activeScan = currentStore.scanHistory.find((item) => item.id === scanId);
+    if (activeScan) {
+      activeScan.progress = clamp(Math.round(((stageIndex + 1) / PIPELINE_STAGES.length) * 92), 8, 92);
+    }
+    appendLog(currentStore, 'info', `Running ${stage.label}: ${stage.description}`, stage.id);
     await setPipelineStage(currentStore, stageIndex, 'active', stage.description);
 
     stageIndex += 1;
@@ -682,13 +698,33 @@ async function completeScan(scanId: string, repository: Repository) {
   const scan = store.scanHistory.find((item) => item.id === scanId);
   if (!scan) return;
 
+  const createdAt = new Date();
+  const demoArtifacts = createDemoArtifacts(repository, scanId);
+  const nextPrNumber =
+    store.pullRequests.reduce((max, pullRequest) => Math.max(max, pullRequest.number), 0) + 1;
+  const pullRequest =
+    demoArtifacts.approvedCorrections > 0
+      ? buildDemoPullRequest(repository, demoArtifacts.approvedCorrections, createdAt.toISOString(), scanId, nextPrNumber)
+      : null;
+
   scan.status = 'completed';
   scan.progress = 100;
-  scan.completedAt = new Date().toISOString();
+  scan.completedAt = createdAt.toISOString();
   scan.duration = Math.max(
     1,
     Math.round((new Date(scan.completedAt).getTime() - new Date(scan.startedAt).getTime()) / 1000),
   );
+  scan.filesChanged = demoArtifacts.filesChanged;
+  scan.meaningfulChanges = demoArtifacts.meaningfulChanges;
+  scan.sectionsChecked = demoArtifacts.sections.length;
+  scan.aiFixes = demoArtifacts.approvedCorrections;
+  scan.baseSha = demoArtifacts.baseSha;
+  scan.headSha = demoArtifacts.headSha;
+  scan.cacheHitRatio = demoArtifacts.cacheHitRatio;
+  scan.indexBuildDuration = demoArtifacts.indexBuildDuration;
+  scan.llmCost = demoArtifacts.llmCost;
+  scan.tokenUsage = demoArtifacts.tokenUsage;
+  scan.prNumber = pullRequest?.number;
 
   store.pipeline = {
     isRunning: false,
@@ -698,34 +734,107 @@ async function completeScan(scanId: string, repository: Repository) {
     message: 'Scan completed',
   };
 
-  repository.lastScan = 'just now';
+  repository.lastScan = summarizeLastScan(createdAt);
+  repository.docSections = demoArtifacts.docSections;
+  repository.coverage = demoArtifacts.coverage;
+  repository.health = demoArtifacts.health;
 
-  const analyticsPoint: AnalyticsDataPoint = {
-    date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    accuracy: store.analytics.at(-1)?.accuracy ?? 0,
-    fixes: store.corrections.length,
-    health: repository.health,
-    confidence:
-      store.corrections.length > 0
-        ? store.corrections.reduce((acc, item) => acc + item.confidence, 0) / store.corrections.length
-        : 0,
-    falsePositive: store.analytics.at(-1)?.falsePositive ?? 0,
-    processingTime: scan.duration,
-    llmCost: scan.llmCost,
-    tokenUsage: scan.tokenUsage,
-  };
+  store.affectedSections = [
+    ...demoArtifacts.sections,
+    ...store.affectedSections.filter((section) => !matchesRepository(section.filePath, repository)),
+  ];
+  store.corrections = [
+    ...demoArtifacts.corrections,
+    ...store.corrections.filter((correction) => correction.repository !== repository.fullName),
+  ];
+  store.pullRequests = [
+    ...(pullRequest ? [pullRequest] : []),
+    ...store.pullRequests
+      .map((existingPullRequest) =>
+        existingPullRequest.repository === repository.fullName && existingPullRequest.status === 'open'
+          ? { ...existingPullRequest, status: 'merged' as const }
+          : existingPullRequest,
+      )
+      .filter((existingPullRequest) => existingPullRequest.repository !== repository.fullName),
+  ];
 
-  store.analytics.push(analyticsPoint);
+  const analyticsPoint = buildAnalyticsPoint(
+    createdAt,
+    repository.health,
+    scan,
+    demoArtifacts.corrections.length,
+    demoArtifacts.avgConfidence,
+    demoArtifacts.scanAccuracy,
+    demoArtifacts.falsePositive,
+  );
 
-  appendLog(store, 'info', `Scan completed for ${repository.fullName} in ${scan.duration}s`, 'scan');
+  store.analytics =
+    store.analytics.length < 4
+      ? seedAnalyticsHistory(
+          analyticsPoint,
+          scan,
+          repository.health,
+          demoArtifacts.corrections.length,
+          demoArtifacts.avgConfidence,
+        ).concat(analyticsPoint)
+      : [...store.analytics.slice(-9), analyticsPoint];
+
+  appendLog(
+    store,
+    'info',
+    `Verified ${demoArtifacts.sections.length} documentation sections for ${repository.fullName}`,
+    'verification',
+    { repository: repository.fullName, scanId, averageConfidence: demoArtifacts.avgConfidence },
+  );
+  appendLog(
+    store,
+    'info',
+    `Generated ${demoArtifacts.approvedCorrections} auto-fix patch(es) and ${demoArtifacts.pendingCorrections} review item(s)`,
+    'correction',
+    { repository: repository.fullName, approved: demoArtifacts.approvedCorrections, pending: demoArtifacts.pendingCorrections },
+  );
+  if (pullRequest) {
+    appendLog(
+      store,
+      'info',
+      `Opened PR #${pullRequest.number} for ${repository.fullName}`,
+      'github',
+      { repository: repository.fullName, pullRequest: pullRequest.githubUrl },
+    );
+  }
+  appendLog(store, 'info', `Scan completed for ${repository.fullName} in ${scan.duration}s`, 'scan', {
+    filesChanged: scan.filesChanged,
+    sectionsChecked: scan.sectionsChecked,
+    aiFixes: scan.aiFixes,
+  });
   pushNotification(store, {
     type: 'scan_finished',
     title: 'Scan Completed',
     description: `Scan of ${repository.fullName} completed in ${scan.duration}s`,
-    timestamp: new Date().toISOString(),
+    timestamp: createdAt.toISOString(),
     read: false,
     repository: repository.fullName,
   });
+  if (pullRequest) {
+    pushNotification(store, {
+      type: 'pr_created',
+      title: `PR #${pullRequest.number} opened`,
+      description: `${demoArtifacts.approvedCorrections} documentation fixes are ready in ${repository.name}`,
+      timestamp: createdAt.toISOString(),
+      read: false,
+      repository: repository.fullName,
+    });
+  }
+  if (demoArtifacts.pendingCorrections > 0) {
+    pushNotification(store, {
+      type: 'review_needed',
+      title: 'Manual review required',
+      description: `${demoArtifacts.pendingCorrections} documentation section${demoArtifacts.pendingCorrections === 1 ? '' : 's'} need review in ${repository.name}`,
+      timestamp: createdAt.toISOString(),
+      read: false,
+      repository: repository.fullName,
+    });
+  }
 
   await saveStore(store);
 }

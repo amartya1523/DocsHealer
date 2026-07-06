@@ -1,9 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Star, GitBranch, FileText, Code2, Clock, Activity, ExternalLink } from 'lucide-react';
+import { Star, GitBranch, FileText, Code2, Clock, Activity, ExternalLink, GitPullRequest } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useRepositories } from '@/lib/api/hooks';
+import { usePullRequests, useRepositories } from '@/lib/api/hooks';
 import { CardListSkeleton, QueryState } from '@/components/ui/QueryState';
 
 function HealthRing({ value, color }: { value: number; color: string }) {
@@ -37,6 +37,7 @@ interface RepositoriesProps {
 
 export function Repositories({ selectedRepo, onSelectRepo }: RepositoriesProps) {
   const { data: repositories = [], isLoading, isError, error, refetch } = useRepositories();
+  const { data: pullRequests = [] } = usePullRequests();
 
   return (
     <div className="p-6 space-y-6">
@@ -63,6 +64,7 @@ export function Repositories({ selectedRepo, onSelectRepo }: RepositoriesProps) 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {repositories.map((repo, i) => {
             const isSelected = selectedRepo === repo.id;
+            const openPrCount = pullRequests.filter((pullRequest) => pullRequest.repository === repo.fullName && pullRequest.status === 'open').length;
             return (
               <motion.button
                 type="button"
@@ -97,6 +99,12 @@ export function Repositories({ selectedRepo, onSelectRepo }: RepositoriesProps) 
                           {isSelected && (
                             <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
                               Selected
+                            </span>
+                          )}
+                          {openPrCount > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
+                              <GitPullRequest className="h-2.5 w-2.5" />
+                              PR {openPrCount}
                             </span>
                           )}
                         </div>
@@ -139,12 +147,20 @@ export function Repositories({ selectedRepo, onSelectRepo }: RepositoriesProps) 
                       <div className="flex items-center gap-1 text-[10px] text-[#475569]">
                         <Clock className="w-3 h-3" /> Last scan {repo.lastScan}
                       </div>
-                      <div className="flex items-center gap-1 text-[10px]">
-                        <Activity className="w-3 h-3" />
-                        <span className="text-[#64748b]">Coverage:</span>
-                        <span className={cn('font-medium', repo.coverage >= 80 ? 'text-green-400' : repo.coverage >= 60 ? 'text-amber-400' : 'text-red-400')}>
-                          {repo.coverage}%
-                        </span>
+                      <div className="flex items-center gap-3 text-[10px]">
+                        {openPrCount > 0 && (
+                          <div className="flex items-center gap-1 text-emerald-300">
+                            <GitPullRequest className="w-3 h-3" />
+                            <span>{openPrCount} open PR</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <Activity className="w-3 h-3" />
+                          <span className="text-[#64748b]">Coverage:</span>
+                          <span className={cn('font-medium', repo.coverage >= 80 ? 'text-green-400' : repo.coverage >= 60 ? 'text-amber-400' : 'text-red-400')}>
+                            {repo.coverage}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
