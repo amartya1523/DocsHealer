@@ -1,0 +1,9 @@
+{
+  "name": "docs-healer-ts-parser",
+  "version": "1.0.0",
+  "description": "TypeScript compiler AST parser helper for Docs Healer",
+  "main": "ts_parser.js",
+  "dependencies": {
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,63 @@
+name: "Self-Healing Technical Documentation"
+description: "Automatically maintains documentation accuracy as code evolves using AST analysis and LLM-based verification."
+inputs:
+  openai_api_key:
+    description: "OpenAI API Key"
+    required: true
+  github_token:
+    description: "GitHub Token for opening PRs and adding comments"
+    required: true
+  docs_path:
+    description: "Path to documentation directory"
+    required: false
+    default: "docs"
+  similarity_threshold:
+    description: "Cosine similarity threshold for semantic linking (0.0 to 1.0)"
+    required: false
+    default: "0.75"
+  auto_fix_confidence_threshold:
+    description: "LLM confidence threshold for automatically creating doc fix PRs (0.0 to 1.0)"
+    required: false
+    default: "0.85"
+  llm_model:
+    description: "OpenAI model to use for verification and repairs"
+    required: false
+    default: "gpt-4o"
+  file_patterns:
+    description: "Comma-separated glob patterns to include or exclude (e.g. *.py, *.ts)"
+    required: false
+    default: "*.py,*.ts,*.tsx,*.js,*.jsx"
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: "18"
+    - name: Install Python Dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r ${{ github.action_path }}/requirements.txt
+    - name: Install Node Dependencies
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}
+        npm ci || npm install
+    - name: Run Docs Healer
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        DOCS_PATH: ${{ inputs.docs_path }}
+        SIMILARITY_THRESHOLD: ${{ inputs.similarity_threshold }}
+        AUTO_FIX_CONFIDENCE_THRESHOLD: ${{ inputs.auto_fix_confidence_threshold }}
+        LLM_MODEL: ${{ inputs.llm_model }}
+        FILE_PATTERNS: ${{ inputs.file_patterns }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+      run: |
+        python ${{ github.action_path }}/docs_healer/main.py
